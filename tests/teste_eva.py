@@ -31,7 +31,7 @@ async def main():
         await pg.wait_for_timeout(300); await pg.screenshot(path='eva_game.png')
         pos = await pg.evaluate("""()=>{ const r=view.canvas.getBoundingClientRect(), q=view.evaRect; return [r.left+(q.x+q.w/2)*view.scale, r.top+(q.y+q.h/2)*view.scale]; }""")
         await pg.mouse.click(pos[0],pos[1]); await pg.wait_for_timeout(250)
-        print('rótulo:', await pg.evaluate("document.getElementById('animalLabel').textContent"), '| Adão recebeu destino?', await pg.evaluate("view.walker.goal"))
+        print('rótulo:', await pg.evaluate("[...document.querySelectorAll('#pops .pop')].map(e => e.textContent).pop()"), '| Adão recebeu destino?', await pg.evaluate("view.walker.goal"))
         await pg.screenshot(path='eva_game2.png')
         print(errs); await b.close()
 asyncio.run(main())

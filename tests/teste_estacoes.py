@@ -20,7 +20,7 @@ async def main():
           for(let i=0;i<60;i++){ const a=performance.now(); V.update(0.05); V.render(); const d=performance.now()-a; worst=Math.max(worst,d); tot+=d; frames++; }
           out.passoMudou = V.world.skey!==k0; out.piorQuadroMs=+worst.toFixed(1); out.mediaMs=+(tot/frames).toFixed(1);
           // 4 estações: botão de pular
-          const seen=[]; for(let i=0;i<4;i++){ document.getElementById('seasonBtn').click(); V.update(0.05); seen.push(SEASONS[Math.floor(V.world.sp)%4].name); }
+          const seen=[]; for(let i=0;i<4;i++){ V.clock += SEASON_SECONDS; V.update(0.05); seen.push(SEASONS[Math.floor(V.world.sp)%4].name); }
           out.pulos=seen; out.hora=+hourOf(V.clock).toFixed(1);
           // chuva e neve: força
           V.weather.kind='rain'; V.weather.intensity=0.8; V.weather.target=0.8; V.weather.timer=99; V.render(); out.chuvaOk=true;

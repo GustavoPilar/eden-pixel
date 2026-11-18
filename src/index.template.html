@@ -97,6 +97,13 @@
   .pop.good { background: rgba(36, 92, 48, 0.92); }
   .pop.out { opacity: 0; transition: opacity 0.4s; }
   @keyframes popin { from { transform: translateY(6px); opacity: 0; } }
+  #fullMap { position: absolute; inset: 0; z-index: 30; background: #0e1a22; display: flex; flex-direction: column; padding: 8px; gap: 6px; }
+  #fullMap[hidden] { display: none; }
+  #fullMapCanvas { flex: 1; min-height: 0; width: 100%; image-rendering: pixelated; }
+  #mapLegend { display: flex; flex-wrap: wrap; gap: 5px 10px; justify-content: center; color: #e8dcc8; font-size: 13px; padding: 2px 2px 6px; pointer-events: none; }
+  #mapLegend span { display: inline-flex; align-items: center; gap: 4px; }
+  #mapLegend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.55); }
+  #mapClose { position: absolute; right: 8px; top: 8px; z-index: 2; }
 </style>
 </head>
 <body>
@@ -108,9 +115,10 @@
       <span id="biomeLabel"></span><span id="seasonRow"></span><span id="clockRow"></span><span id="ambRow"></span><span id="weatherIcon"></span><span id="actRow"></span><span class="vsep"></span>
       <span class="vit" data-k="food" title="Comida"><i>🍖</i><b>85</b></span><span class="vit" data-k="water" title="Água"><i>💧</i><b>85</b></span><span class="vit" data-k="temp" title="Temperatura do corpo"><i>🌡️</i><b>36.5</b></span><span class="vit" data-k="energy" title="Energia"><i>⚡</i><b>95</b></span><span class="vit" data-k="health" title="Saúde"><i>❤️</i><b>100</b></span>
     </div>
-    <div id="tools"><button class="pill" id="follow" hidden aria-label="Voltar a seguir o Adão">🎯</button><button class="pill" id="seasonBtn" aria-label="Ir para a próxima estação">🍂</button><button class="pill" id="speedBtn" aria-label="Velocidade do tempo">⏩</button><button class="pill" id="newWorld" aria-label="Gerar outro mundo">🔄</button><button class="pill" id="zoomOut" aria-label="Diminuir o zoom">−</button><button class="pill" id="zoomIn" aria-label="Aumentar o zoom">+</button></div>
+    <div id="tools"><button class="pill" id="follow" hidden aria-label="Voltar a seguir o Adão">🎯</button><button class="pill" id="zoomOut" aria-label="Diminuir o zoom">−</button><button class="pill" id="zoomIn" aria-label="Aumentar o zoom">+</button></div>
     <div id="pops" aria-live="polite"></div>
-    <div id="miniWrap"><button id="mini" aria-label="Mini-mapa. Toque para alternar entre perto e o mundo todo"><canvas id="miniCanvas"></canvas></button><div id="north" aria-label="Norte"><b>N</b></div></div>
+    <div id="fullMap" hidden><canvas id="fullMapCanvas"></canvas><div id="mapLegend"></div><button class="pill" id="mapClose" aria-label="Fechar o mapa">✕</button></div>
+    <div id="miniWrap"><button id="mini" aria-label="Mini-mapa. Toque para abrir o mapa completo"><canvas id="miniCanvas"></canvas></button><div id="north" aria-label="Norte"><b>N</b></div></div>
         <div id="catalogView" hidden><div id="catalog"></div></div>
     <div id="loading" hidden>Gerando o mundo…</div>
   </main>

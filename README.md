@@ -14,10 +14,8 @@ abra no navegador e jogue.
 | Beber | Toque num lago (a água do mar é salgada; o gelo mata a sede, mas esfria o corpo) |
 | Colher | Toque numa planta comestível (elas brilham quando você está perto) |
 | Mover a câmera | Arraste o mapa; o botão 🎯 volta a seguir o Adão |
+| Mapa completo | Toque no minimapa (círculo no canto): abre o mundo todo em tela cheia, com o Adão, a Eva e a área que você está vendo; feche no ✕ (no computador, tecla `M` ou `Esc`) |
 | Zoom | Pinça no celular, roda do mouse ou botões `+` e `−` (1× a 8×) |
-| Próxima estação | Botão 🍂 (vai para o meio da estação seguinte) |
-| Acelerar o tempo | Botão ⏩ (1×, 4× e 12×) |
-| Novo mundo | Botão 🔄 |
 | Ver detalhes | Toque na Eva, num coelho ou numa toca para um aviso com ícones e números |
 
 No computador também dá para andar com as setas ou WASD.

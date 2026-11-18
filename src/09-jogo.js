@@ -142,7 +142,6 @@ class MapView {
     this.seasonSprites = new SeasonSprites();
     this.rabbitSprites = new RabbitSprites();
     this.burrowSprite = makeBurrowSprite();
-    this.timeScale = 1;
     this.sway = new SwayBank();
     this.wind = 0.5;
     this.leafPlants = [];
@@ -843,6 +842,105 @@ class Minimap {
   }
 }
 
+/** Mapa do mundo em tela cheia: abre ao tocar no minimapa e mostra o mundo todo, o Adão, a Eva e a área que a câmera vê. */
+class FullMap {
+  /** @param {MapView} view */
+  constructor(view) {
+    this.view = view;
+    this.root = document.getElementById('fullMap');
+    this.canvas = document.getElementById('fullMapCanvas');
+    this.ctx = this.canvas.getContext('2d');
+    /** Cada pixel do mapa guardado representa `step` px do mundo. */
+    this.step = 8;
+    this.base = null;
+    this.key = -1;
+    this.worldRef = null;
+    this.open = false;
+    this.root.addEventListener('click', (e) => { if (e.target === this.root || e.target.id === 'mapClose') this.hide(); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.open) this.hide();
+      else if ((e.key === 'm' || e.key === 'M') && !e.repeat) { if (this.open) this.hide(); else this.show(); }
+    });
+    this.buildLegend();
+  }
+
+  /** Legenda só com cores e ícones: um quadradinho de cor por ambiente, mais o Adão e a Eva. */
+  buildLegend() {
+    const box = document.getElementById('mapLegend');
+    const seen = new Set();
+    const add = (color, icon) => { const s = document.createElement('span'); s.innerHTML = `<i style="background:${color}"></i>${icon}`; box.appendChild(s); };
+    for (let b = 0; b < BIOME_ICON.length; b++) {
+      const c = MINI_COLORS[b], key = `${c.join(',')}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      add(`rgb(${c[0]},${c[1]},${c[2]})`, BIOME_ICON[b]);
+    }
+    add('#ffd23f', '👨'); add('#ff8fb8', '👩');
+  }
+
+  /** Pinta o mundo todo (cor de cada ambiente), refeito quando a estação muda (lagos congelados). */
+  build() {
+    const w = this.view.world, s = this.step, mw = Math.ceil(w.w / s), mh = Math.ceil(w.h / s);
+    const c = document.createElement('canvas');
+    c.width = mw; c.height = mh;
+    const cx = c.getContext('2d'), img = cx.createImageData(mw, mh);
+    for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
+      const col = MINI_COLORS[w.biomeAt(x * s + s / 2, y * s + s / 2)], i = (y * mw + x) * 4;
+      img.data[i] = col[0]; img.data[i + 1] = col[1]; img.data[i + 2] = col[2]; img.data[i + 3] = 255;
+    }
+    cx.putImageData(img, 0, 0);
+    this.base = c;
+    this.key = w.skey;
+    this.worldRef = w;
+  }
+
+  show() {
+    if (!this.base || this.key !== this.view.world.skey || this.worldRef !== this.view.world) this.build();
+    this.open = true;
+    this.root.hidden = false;
+  }
+
+  hide() {
+    this.open = false;
+    this.root.hidden = true;
+  }
+
+  /** @param {number} t tempo (s) */
+  render(t) {
+    if (!this.open) return;
+    const r = this.canvas.getBoundingClientRect(), W = Math.max(1, Math.floor(r.width)), H = Math.max(1, Math.floor(r.height));
+    if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
+    const ctx = this.ctx, v = this.view, w = v.world;
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#0e1a22';
+    ctx.fillRect(0, 0, W, H);
+    const k = Math.min(W / w.w, H / w.h), mw = Math.floor(w.w * k), mh = Math.floor(w.h * k), ox = Math.floor((W - mw) / 2), oy = Math.floor((H - mh) / 2);
+    ctx.drawImage(this.base, ox, oy, mw, mh);
+    ctx.strokeStyle = '#fff3d8';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(ox - 1, oy - 1, mw + 2, mh + 2);
+    // o que a câmera está mostrando
+    const cam = v.camera();
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(Math.round(ox + cam.x * k) + 0.5, Math.round(oy + cam.y * k) + 0.5, Math.max(3, Math.round(v.w * k)), Math.max(3, Math.round(v.h * k)));
+    // Eva (rosa) e Adão (dourado, pisca devagar)
+    const mark = (x, y, color) => {
+      const px = Math.round(ox + x * k), py = Math.round(oy + y * k);
+      ctx.fillStyle = '#2b1a12'; ctx.fillRect(px - 5, py - 5, 11, 11);
+      ctx.fillStyle = color; ctx.fillRect(px - 4, py - 4, 9, 9);
+    };
+    mark(v.eva.walker.x, v.eva.walker.y, '#ff8fb8');
+    mark(v.walker.x, v.walker.y, Math.floor(t * 2.5) % 2 === 0 ? '#ffd23f' : '#ff9a3f');
+    // norte
+    const nx = ox + mw - 18, ny = oy + 20;
+    ctx.fillStyle = '#2b1a12'; ctx.beginPath(); ctx.arc(nx, ny, 13, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c43a3a'; ctx.beginPath(); ctx.arc(nx, ny, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('N', nx, ny + 1);
+  }
+}
+
 /** Mostra Adão e Eva no catálogo (de frente, de lado e de costas). */
 function buildPeopleCatalog() {
   const root = document.getElementById('catalog');
@@ -942,25 +1040,11 @@ function refreshEcology(view) {
     window.view = view;
     view.hud = new VitalsHud();
     view.notify('Toque: andar, beber, colher · Arraste: câmera · Pinça: zoom', 'info', 'hint', 7000);
-    const speeds = [1, 4, 12];
-    let speedI = 0;
-    document.getElementById('speedBtn').addEventListener('click', () => {
-      speedI = (speedI + 1) % speeds.length;
-      view.timeScale = speeds[speedI];
-      document.getElementById('speedBtn').textContent = speedI ? `⏩${speeds[speedI]}×` : '⏩';
-      view.notify(`⏩ Tempo ${speeds[speedI]}×`, 'info', 'tempo2', 1500);
-    });
-    document.getElementById('seasonBtn').addEventListener('click', () => {
-      // vai para o meio da próxima estação, mantendo a hora do dia
-      const next = (Math.floor(view.world.sp) + 1) % 4;
-      let sp0 = view.world.sp, target = view.clock + (((next + 0.45) - sp0 + 4) % 4) * SEASON_SECONDS;
-      target = target - (target % DAY_SECONDS) + (view.clock % DAY_SECONDS);
-      view.clock = target;
-      view.notify(`${SEASONS[next].icon} ${SEASONS[next].name}`);
-    });
     const minimap = new Minimap(document.getElementById('miniCanvas'), view);
     window.minimap = minimap;
-    document.getElementById('mini').addEventListener('click', () => minimap.toggle());
+    const fullMap = new FullMap(view);
+    window.fullMap = fullMap;
+    document.getElementById('mini').addEventListener('click', () => fullMap.show());
     const showLabel = (text) => view.notify(text, 'info', 'label', 3000);
     const tap = (e) => {
       const p = view.toWorld(e.clientX, e.clientY);
@@ -1059,7 +1143,6 @@ function refreshEcology(view) {
     window.addEventListener('resize', () => view.resize());
     document.getElementById('zoomIn').addEventListener('click', () => view.setScale(view.scale + 1));
     document.getElementById('zoomOut').addEventListener('click', () => view.setScale(view.scale - 1));
-    document.getElementById('newWorld').addEventListener('click', () => start(Math.floor(Math.random() * 9000) + 2).then((w) => { view.setWorld(w); minimap.build(); }));
     document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
       const cat = t.dataset.tab === 'catalog';
@@ -1083,11 +1166,12 @@ function refreshEcology(view) {
     const loop = (now) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      for (let i = 0, k = view.timeScale || 1; i < k; i++) view.update(dt);
+      view.update(dt);
       ecoT -= dt;
       if (ecoT <= 0) { ecoT = 0.5; refreshEcology(view); }
       view.render();
       minimap.render(view.time);
+      fullMap.render(view.time);
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
