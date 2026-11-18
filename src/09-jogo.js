@@ -140,7 +140,7 @@ class MapView {
     this.adam = new SpriteBank();
     this.evaSprites = new SpriteBank(new EvaSpriteFactory());
     this.seasonSprites = new SeasonSprites();
-    this.rabbitSprites = new RabbitSprites();
+    this.creatureSprites = new CreatureSprites();
     this.burrowSprite = makeBurrowSprite();
     this.sway = new SwayBank();
     this.wind = 0.5;
@@ -167,7 +167,7 @@ class MapView {
     this.eva = new Eva(world, this.walker);
     this.adamS = new Survivor('Adão', this.walker, world);
     this.ecology = new Ecology(world, this.walker);
-    this.rabbits = new RabbitField(this.ecology);
+    this.fauna = new CreatureField(this.ecology);
     this.evaS = this.eva.surv;
     this.intent = null;
     this.weather = new Weather();
@@ -310,12 +310,13 @@ class MapView {
       // coelhos: população do mundo todo + os que estão perto da câmera (só de dia; à noite e na tempestade ficam na toca)
       const cam1 = this.camera(), dark = darkness(env.hour), storm = this.weather.intensity > 0.5 && this.weather.kind !== 'snow';
       this.ecology.update(dt, { sp: this.world.sp, clock: this.clock, dark });
-      this.rabbits.update(dt, { cx: cam1.x + this.w / 2, cy: cam1.y + this.h / 2, radius: Math.hypot(this.w, this.h) / 2 + 120, people: [this.walker, this.eva.walker], shelter: dark > 0.55 || storm, clock: this.clock, fx: this.fx, world: this.world });
+      this.fauna.update(dt, { cx: cam1.x + this.w / 2, cy: cam1.y + this.h / 2, radius: Math.hypot(this.w, this.h) / 2 + 120, people: [this.walker, this.eva.walker], shelter: dark > 0.55 || storm, clock: this.clock, fx: this.fx, world: this.world });
       for (const ev of this.ecology.events.splice(0)) {
         if (Math.hypot(ev.x - this.walker.x, ev.y - this.walker.y) > 240) continue;
-        if (ev.type === 'birth' && ev.n) this.notify(`🐇🍼 +${ev.n}`, 'good', 'coelho', 3000);
-        else if (ev.type === 'death') this.notify(`🐇✝ ${DEATH_ICON[ev.cause]}`, 'info', 'coelho', 3000);
-        else if (ev.type === 'colonize') this.notify('🕳️ 🐇 nova toca', 'good', 'coelho', 3000);
+        const ic = PREY[ev.sp].icon;
+        if (ev.type === 'birth' && ev.n) this.notify(`${ic}🍼 +${ev.n}`, 'good', 'fauna', 3000);
+        else if (ev.type === 'death') this.notify(`${ic}✝ ${DEATH_ICON[ev.cause]}`, 'info', 'fauna', 3000);
+        else if (ev.type === 'colonize') this.notify(`${ic} novo grupo`, 'good', 'fauna', 3000);
       }
     }
     for (const f of this.fx) f.t += dt;
@@ -401,30 +402,33 @@ class MapView {
     }
   }
 
-  /** Desenha as tocas (entradas na terra) visíveis na tela. */
+  /** Desenha as tocas (entradas na terra) visíveis na tela, só das espécies que cavam. */
   drawBurrows(ctx, cam) {
-    for (const w of this.ecology.warrens) {
-      const x = Math.round(w.x - cam.x - 7), y = Math.round(w.y - cam.y - 4);
-      if (x < -20 || y < -20 || x > this.w + 20 || y > this.h + 20) { w.rect = null; continue; }
+    for (const g of this.ecology.groups) {
+      if (PREY[g.sp].den !== 'burrow') continue;
+      const x = Math.round(g.x - cam.x - 7), y = Math.round(g.y - cam.y - 4);
+      if (x < -20 || y < -20 || x > this.w + 20 || y > this.h + 20) { g.rect = null; continue; }
       ctx.drawImage(this.burrowSprite, x, y);
-      w.rect = { x, y, w: 14, h: 8 };
+      g.rect = { x, y, w: 14, h: 8 };
     }
   }
 
-  /** Desenha um coelho (sombra, sprite da fase e capim na boca quando come). */
-  drawRabbit(a, cam) {
-    const ctx = this.ctx, e = this.rabbitSprites.get(a.frame, a.d.stage, a.dir < 0), c = e.canvas;
+  /** Desenha um animal (sombra ou ondinhas na água, sprite da fase e o alimento na boca quando come). */
+  drawCreature(a, cam) {
+    const ctx = this.ctx, S = a.S, e = this.creatureSprites.get(a.d.sp, a.frame, a.d.stage, a.dir < 0), c = e.canvas;
     const x = Math.round(a.x - cam.x - c.width / 2), y = Math.round(a.y - cam.y - c.height + 1 - a.lift);
     const gx = Math.round(a.x - cam.x), gy = Math.round(a.y - cam.y);
-    ctx.fillStyle = 'rgba(20,30,20,0.28)';
-    const half = Math.max(2, Math.round(c.width * 0.36 * (1 - a.lift / 20)));
-    for (let dy = -1; dy <= 1; dy++) { const hw = Math.round(half * Math.sqrt(1 - (dy / 2) * (dy / 2))); ctx.fillRect(gx - hw, gy + dy, hw * 2, 1); }
-    ctx.drawImage(c, x, y);
-    if (a.state === 'act' && a.act === 'eat') {
-      const fl = a.dir < 0;
-      ctx.fillStyle = '#6fc85a'; ctx.fillRect(x + e.mouth.x + (fl ? -1 : 0), y + e.mouth.y - 1, 1, 2);
-      ctx.fillStyle = '#4ea84a'; ctx.fillRect(x + e.mouth.x + (fl ? -2 : 1), y + e.mouth.y, 1, 1);
+    if (S.water) {
+      const rr = Math.max(3, Math.round(c.width * 0.45 + Math.sin(a.t * 2) * 0.8));
+      ctx.fillStyle = 'rgba(235,250,255,0.55)';
+      for (let k = 0; k < 28; k++) { const ang = (k / 28) * Math.PI * 2; ctx.fillRect(Math.round(gx + Math.cos(ang) * rr), Math.round(gy - 1 + Math.sin(ang) * rr * 0.32), 1, 1); }
+    } else {
+      ctx.fillStyle = 'rgba(20,30,20,0.28)';
+      const half = Math.max(2, Math.round(c.width * 0.36 * (1 - a.lift / 20)));
+      for (let dy = -1; dy <= 1; dy++) { const hw = Math.round(half * Math.sqrt(1 - (dy / 2) * (dy / 2))); ctx.fillRect(gx - hw, gy + dy, hw * 2, 1); }
     }
+    ctx.drawImage(c, x, y);
+    if (a.state === 'act' && a.act === 'eat' && S.item) drawItem(ctx, S.item, x + e.mouth.x, y + e.mouth.y, a.dir < 0);
     a.rect = { x, y, w: c.width, h: c.height };
     return { c, x, y };
   }
@@ -623,7 +627,7 @@ class MapView {
     const plants = world.plantsIn(cam.x - 40, cam.y, cam.x + this.w + 40, cam.y + this.h + 90);
     for (const p of plants) if (FLAT_SPECIES.has(p.id)) this.drawPlant(p, cam);
     this.drawBurrows(ctx, cam);
-    for (const a of this.rabbits.actors) a.rect = null;
+    for (const a of this.fauna.actors) a.rect = null;
     // personagem
     const { frame, lift } = this.walker.pose();
     const px = Math.round(this.walker.x - cam.x), py = Math.round(this.walker.y - cam.y);
@@ -632,7 +636,7 @@ class MapView {
     const sx = px - CENTER_X + shk, sy = py - 27 - lift;
     const items = [{ y: wy, k: 1, kind: 'adam' }, { y: this.eva.walker.y, k: 1, kind: 'eva' }];
     for (const p of plants) if (!FLAT_SPECIES.has(p.id)) items.push({ y: p.y, k: 0, kind: 'plant', p });
-    for (const a of this.rabbits.actors) if (!a.inside && a.x > cam.x - 30 && a.x < cam.x + this.w + 30 && a.y > cam.y - 10 && a.y < cam.y + this.h + 50) items.push({ y: a.y, k: 0, kind: 'rabbit', a });
+    for (const a of this.fauna.actors) if (!a.inside && a.x > cam.x - 30 && a.x < cam.x + this.w + 30 && a.y > cam.y - 10 && a.y < cam.y + this.h + 50) items.push({ y: a.y, k: 0, kind: 'creature', a });
     items.sort((u, v) => u.y - v.y || u.k - v.k);
     const fronts = [];
     let adamDrawn = false;
@@ -660,8 +664,8 @@ class MapView {
         } else this.evaRect = null;
         continue;
       }
-      if (it.kind === 'rabbit') {
-        r = this.drawRabbit(it.a, cam);
+      if (it.kind === 'creature') {
+        r = this.drawCreature(it.a, cam);
         if (adamDrawn && r && r.x < sx + sprite.width && r.x + r.c.width > sx && r.y < sy + sprite.height && r.y + r.c.height > sy) fronts.push(r);
         continue;
       }
@@ -975,51 +979,70 @@ function buildPeopleCatalog() {
   root.appendChild(box);
 }
 
-/** Seção "Coelhos" do catálogo: as 4 fases da vida e as estatísticas da população (atualizadas ao vivo). */
-function buildRabbitCatalog() {
+/** Seção "Animais" do catálogo: cada espécie de presa com suas fases da vida e a população ao vivo. */
+function buildFaunaCatalog() {
   const root = document.getElementById('catalog');
   const head = document.createElement('h1');
-  head.textContent = 'Coelhos';
+  head.textContent = 'Animais (presas)';
   head.className = 'cat-title';
   root.appendChild(head);
-  const box = document.createElement('section');
-  const card = document.createElement('div');
-  card.className = 'animal';
-  const row = document.createElement('div');
-  row.className = 'row';
-  const bank = new RabbitSprites();
-  const labels = ['🍼 0–2,5 min', '🌱 até 7 min', '💪 adulto', '👴 últimos 30 min'];
-  for (let st = 0; st < 4; st++) {
-    const src = bank.get('idle', st).canvas, fig = document.createElement('figure'), c = document.createElement('canvas');
-    c.width = src.width; c.height = src.height;
-    c.getContext('2d').drawImage(src, 0, 0);
-    c.style.width = `${src.width * 5}px`; c.style.height = `${src.height * 5}px`;
-    fig.appendChild(c);
-    const cap = document.createElement('figcaption');
-    cap.textContent = labels[st];
-    fig.appendChild(cap);
-    row.appendChild(fig);
-  }
-  card.appendChild(row);
   const note = document.createElement('div');
   note.className = 'adesc';
-  note.textContent = 'Só saem de dia; à noite e na tempestade ficam na toca. Gestação de 2 min, ninhadas de 2 a 5, filhotes viram adultos aos 7 min e vivem de 1h40 a 2h40. Quando a toca lota, os jovens se mudam ou fundam tocas novas.';
-  card.appendChild(note);
+  note.style.margin = '6px 2px 10px';
+  note.textContent = 'Só saem de dia; à noite, na tempestade (e no frio, os de sangue frio) ficam recolhidos. Têm filhote, jovem, adulto e idoso; nascem, morrem, se mudam e fundam grupos novos. Ainda não há predadores.';
+  root.appendChild(note);
   const stats = document.createElement('div');
-  stats.id = 'ecoStats';
+  stats.id = 'ecoTotals';
   stats.className = 'adesc';
-  stats.style.cssText = 'margin-top:8px; line-height:1.7; font-size:14px;';
-  card.appendChild(stats);
-  box.appendChild(card);
-  root.appendChild(box);
+  stats.style.cssText = 'margin:0 2px 10px; line-height:1.7; font-size:14px;';
+  root.appendChild(stats);
+  const bank = new CreatureSprites();
+  for (const sp of Object.keys(PREY)) {
+    const S = PREY[sp], card = document.createElement('div');
+    card.className = 'animal';
+    const t = document.createElement('div');
+    t.className = 'aname';
+    t.textContent = `${S.icon} ${S.name}`;
+    card.appendChild(t);
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const st of [0, 2, 3]) {
+      const src = bank.get(sp, 'idle', st).canvas, fig = document.createElement('figure'), c = document.createElement('canvas');
+      c.width = src.width; c.height = src.height;
+      c.getContext('2d').drawImage(src, 0, 0);
+      const k = Math.max(2, Math.min(5, Math.floor(110 / Math.max(src.width, src.height))));
+      c.style.width = `${src.width * k}px`; c.style.height = `${src.height * k}px`;
+      fig.appendChild(c);
+      const cap = document.createElement('figcaption');
+      cap.textContent = STAGE_ICON[st];
+      fig.appendChild(cap);
+      row.appendChild(fig);
+    }
+    card.appendChild(row);
+    const L = S.life, m = (s) => Math.round(s / 60);
+    const info = document.createElement('div');
+    info.className = 'adesc';
+    info.textContent = `🍼 até ${m(L.kit)} min · 🌱 até ${m(L.young)} min · ⏳ vive ${Math.round(L.lifeMin / 600) / 10}–${Math.round(L.lifeMax / 600) / 10} h · 🤰 ${m(L.gest)} min · ninhada ${L.litter[0]}${L.litter[1] > L.litter[0] ? `–${L.litter[1]}` : ''}`;
+    card.appendChild(info);
+    const live = document.createElement('div');
+    live.className = 'adesc eco-sp';
+    live.dataset.sp = sp;
+    live.style.cssText = 'margin-top:4px; font-size:14px;';
+    card.appendChild(live);
+    root.appendChild(card);
+  }
 }
 
-/** Atualiza os números da população de coelhos no catálogo (só quando a aba está aberta). */
+/** Atualiza os números da população no catálogo (só quando a aba está aberta). */
 function refreshEcology(view) {
-  const el = document.getElementById('ecoStats');
+  const el = document.getElementById('ecoTotals');
   if (!el || el.offsetParent === null || !view.ecology) return;
-  const c = view.ecology.census(), s = view.ecology.stats, d = s.deaths;
-  el.innerHTML = `🐇 <b>${c.total}</b> &nbsp; 🍼${c.stages[0]} 🌱${c.stages[1]} 💪${c.stages[2]} 👴${c.stages[3]}<br>♂${c.males} ♀${c.females} 🤰${c.pregnant}<br>🕳️ ${c.warrens} tocas (vazias: ${c.empty}) · 🌱 pasto ${Math.round(c.pool)}<br>🍼 nascimentos <b>${s.births}</b> · ✝ mortes ⏳${d.idade} 🥕${d.fome} ⚠️${d.acidente} 🥶${d.frio} 🏘️${d.lotacao}<br>🚶 mudanças ${s.dispersed} · 🕳️ novas tocas ${s.colonized} · 🛬 chegadas ${s.immigrated || 0}`;
+  const E = view.ecology, c = E.census(), s = E.stats, d = s.deaths;
+  el.innerHTML = `🌍 <b>${c.total}</b> animais em ${c.groups} grupos<br>🍼 nascimentos <b>${s.births}</b> · ✝ mortes ⏳${d.idade} 🥕${d.fome} ⚠️${d.acidente} 🥶${d.frio} 🏘️${d.lotacao}<br>🚶 mudanças ${s.dispersed} · 🆕 grupos novos ${s.colonized} · 🛬 chegadas ${s.immigrated}`;
+  for (const live of document.querySelectorAll('.eco-sp')) {
+    const e = c.bySp[live.dataset.sp];
+    live.innerHTML = `<b>${e.total}</b> &nbsp; 🍼${e.stages[0]} 🌱${e.stages[1]} 💪${e.stages[2]} 👴${e.stages[3]} &nbsp; ♂${e.males} ♀${e.females} 🤰${e.pregnant} &nbsp; 👥${e.groups - e.empty}/${e.groups}`;
+  }
 }
 
 /** Ponto de entrada. */
@@ -1030,7 +1053,7 @@ function refreshEcology(view) {
   const speciesBank = new SpeciesBank();
   buildCatalog(speciesBank);
   buildPeopleCatalog();
-  buildRabbitCatalog();
+  buildFaunaCatalog();
   const start = (seed) => new Promise((resolve) => {
     loading.hidden = false;
     setTimeout(() => { const w = generateWorld(seed); loading.hidden = true; resolve(w); }, 30);
@@ -1057,14 +1080,14 @@ function refreshEcology(view) {
       }
       // planta comestível sob o toque
       const cam = view.camera(), sx = p.x - cam.x, sy = p.y - cam.y;
-      const ra = view.rabbits.at(sx, sy);
+      const ra = view.fauna.at(sx, sy);
       if (ra) {
         const d = ra.d;
-        showLabel(`🐇${d.sex === 'F' ? '♀' : '♂'} ${STAGE_ICON[d.stage]} ⏳${Math.floor(d.age / 60)}m 🥕${Math.round(d.food)} ❤${Math.round(d.health)}${d.preg > 0 ? ' 🤰' : ''}`);
+        showLabel(`${PREY[d.sp].icon}${d.sex === 'F' ? '♀' : '♂'} ${STAGE_ICON[d.stage]} ⏳${Math.floor(d.age / 60)}m 🥕${Math.round(d.food)} ❤${Math.round(d.health)}${d.preg > 0 ? ' 🤰' : ''}`);
         return;
       }
       const bw = view.ecology.burrowAt(p.x, p.y);
-      if (bw) { showLabel(`🕳️ 🐇${bw.members.length} 🌱${Math.round(bw.pool)}`); return; }
+      if (bw) { showLabel(`🕳️ ${PREY[bw.sp].icon}${bw.members.length} 🌱${Math.round(bw.pool)}`); return; }
       const pr = view.plantRects.filter((r) => sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h).sort((u, v) => v.p.y - u.p.y)[0];
       if (pr) {
         if (isPoison(pr.p)) { view.notify('Cogumelo vermelho: venenoso. Melhor não comer!'); return; }

@@ -2419,9 +2419,53 @@ const PETAL_COLS = ['#ffffff', '#ffd1e0', '#ffc0d4'];
 // reprodução, mortes e repovoamento entre tocas ("warrens") do mundo todo.
 // ---------------------------------------------------------------------
 
-/** Grade com escala: desenha em coordenadas "grandes" e entrega o sprite menor, em pixels inteiros. */
+// ---------------------------------------------------------------------
+// Sprites das presas: construtores por plano corporal (quadrúpede, ave, sapo, lagarto,
+// foca, caranguejo, coelho/lebre), sempre olhando para a direita e em escala por fase da vida.
+// ---------------------------------------------------------------------
+
+// ---------------------------------------------------------------------
+// Animais em pixel art: construtores por "plano corporal" (quadrúpede, ave,
+// peixe, réptil...) e uma ficha por espécie, com quadros de andar, comer e
+// uma ação própria. Sempre desenhados olhando para a direita.
+// ---------------------------------------------------------------------
+
+/** Rampas de pelagem (escuro → claro). */
+const AR = Object.freeze({
+  rabbit: ['#5a4636', '#8a7258', '#b89c7c', '#e0ccb0'],
+  wool: ['#b8b2a6', '#d8d2c6', '#eeeae0', '#ffffff'],
+  darkFace: ['#1f1b18', '#2e2824', '#443c36', '#5e544c'],
+  deer: ['#5a3a22', '#7e5430', '#a8764a', '#cf9f6c'],
+  squirrel: ['#6a3a1c', '#944f26', '#bf7238', '#e29a58'],
+  fox: ['#8a3a12', '#b8541c', '#e0762c', '#f4a24c'],
+  frog: ['#1f5a2a', '#2f7e36', '#4ea84a', '#8bd267'],
+  shell: ['#7a4a22', '#a8683a', '#cf8f58', '#ecb88a'],
+  snailBody: ['#8a7e66', '#a89c84', '#c8bca0', '#e4dac4'],
+  monkey: ['#3a2418', '#5a3a24', '#7e5434', '#a8743e'],
+  skin: ['#8a5a3a', '#b07e58', '#d2a47c', '#ecc8a0'],
+  macaw: ['#7a0f12', '#b01c1c', '#e03030', '#ff6a5a'],
+  jaguar: ['#b87a1a', '#d9962a', '#efb340', '#fcd878'],
+  croc: ['#1f3f22', '#2f5e30', '#488044', '#6ea45a'],
+  heron: ['#5a6a7e', '#7e8fa4', '#a5b4c4', '#d4dde6'],
+  white: ['#aab4c2', '#d0d8e2', '#f0f4f8', '#ffffff'],
+  camel: ['#8a6a3a', '#b08a4c', '#d2ac6a', '#ecca8c'],
+  lizard: ['#7a5a2a', '#a08040', '#c8a85a', '#e8d088'],
+  scorpion: ['#3a1c0a', '#5e2e12', '#8a4a1e', '#b87038'],
+  wolf: ['#3a3e46', '#5a606a', '#868c96', '#b8bec8'],
+  reindeer: ['#7a6a58', '#a08c76', '#c8b49c', '#ece0cc'],
+  polar: ['#b8c4d4', '#d8e0ec', '#f0f4fa', '#ffffff'],
+  seal: ['#5a6272', '#7e8898', '#a8b2c0', '#d4dae4'],
+  crab: ['#8a1a10', '#b8301c', '#e0502c', '#f89060'],
+  duck: ['#5a4a38', '#8a7458', '#b09c7a', '#d8c8a4'],
+  green: ['#143a1e', '#1f5a2c', '#2f7e3c', '#4ea85a'],
+  goldfish: ['#a85a1a', '#d27a28', '#f0a040', '#ffd078'],
+  silver: ['#4a6a88', '#7a9ab4', '#a8c4d8', '#d8e8f2'],
+  dolphin: ['#4a5a72', '#6a7e98', '#8fa2ba', '#b8c8dc'],
+});
+
+/** Grade com escala: o código desenha em coordenadas "grandes" e o resultado sai menor, em pixels inteiros. */
 class ScaledGrid {
-  /** @param {number} w @param {number} h @param {number} s */
+  /** @param {number} w @param {number} h @param {number} s fator de escala (0–1) */
   constructor(w, h, s) {
     this.s = s;
     this.grid = new PixelGrid(Math.max(4, Math.ceil(w * s)), Math.max(4, Math.ceil(h * s)));
@@ -2433,6 +2477,7 @@ class ScaledGrid {
 
   get(x, y) { return this.grid.get(Math.round(x * this.s), Math.round(y * this.s)); }
 
+  /** Escrita direta (já em pixels finais). */
   put(x, y, c) { this.grid.set(x, y, c); }
 
   pget(x, y) { return this.grid.get(x, y); }
@@ -2442,20 +2487,329 @@ class ScaledGrid {
   mirrored() { return this.grid.mirrored(); }
 }
 
+/** Escala usada pelos construtores durante a montagem de um quadro. */
+let CUR_SCALE = 1;
+
+/** @returns {ScaledGrid} grade na escala da espécie em construção */
+function newGrid(w, h) { return new ScaledGrid(w, h, CUR_SCALE); }
+
+/** Pinta só onde já existe pixel (barriga, manchas, brilhos). */
+function blobOn(g, cx, cy, rx, ry, ramp, bias = 0) {
+  const k = g.s || 1;
+  if (k !== 1) { cx *= k; cy *= k; rx = Math.max(0.9, rx * k); ry = Math.max(0.9, ry * k); }
+  const get = g.pget ? g.pget.bind(g) : g.get.bind(g), put = g.put ? g.put.bind(g) : g.set.bind(g);
+  for (let y = Math.floor(cy - ry - 1); y <= Math.ceil(cy + ry + 1); y++) for (let x = Math.floor(cx - rx - 1); x <= Math.ceil(cx + rx + 1); x++) {
+    const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
+    if (dx * dx + dy * dy > 1 || get(x, y) === null) continue;
+    put(x, y, ramp[toneIdx(lightAt(dx, dy) + bias, x, y, 0.1)]);
+  }
+}
+
+/** Pontos soltos só sobre pixels existentes (manchas, pintas). */
+function speckle(g, seed, n, color, x0, y0, x1, y1) {
+  const rnd = mulberry32(seed), k = g.s || 1;
+  const get = g.pget ? g.pget.bind(g) : g.get.bind(g), put = g.put ? g.put.bind(g) : g.set.bind(g);
+  const cnt = Math.max(2, Math.round(n * k * k));
+  for (let i = 0; i < cnt; i++) { const x = Math.floor((x0 + rnd() * (x1 - x0)) * k), y = Math.floor((y0 + rnd() * (y1 - y0)) * k); if (get(x, y) !== null) put(x, y, color); }
+}
+
+/** Itens pequenos que aparecem na boca quando o bicho come (cada um com poucos pixels). */
+const ITEM_PIXELS = {
+  grass: [['#4ea84a', 0, 0], ['#6fc85a', 1, -1], ['#3a8a3a', -1, 0], ['#6fc85a', 0, -1]],
+  berry: [['#c43a4a', 0, 0], ['#e0586a', 1, 0], ['#7a1a28', 0, 1], ['#4a8a3a', 0, -1]],
+  nut: [['#8a5a2a', 0, 0], ['#b07a3a', 1, 0], ['#5a3a1a', 0, 1], ['#b07a3a', 1, -1]],
+  fish: [['#a8c4d8', 0, 0], ['#d8e8f2', 1, 0], ['#7a9ab4', 2, 0], ['#4a6a88', 3, -1], ['#4a6a88', 3, 1], ['#a8c4d8', -1, 0]],
+  banana: [['#f0d040', 0, 0], ['#f8e870', 1, -1], ['#d8b020', 2, -1], ['#8a6a1a', 3, -2]],
+  leaf: [['#4ea84a', 0, 0], ['#8bd267', 1, -1], ['#2f7e36', 2, 0]],
+  moss: [['#8aa05a', 0, 0], ['#aac070', 1, 0], ['#6a8a42', 0, 1]],
+  fly: [['#1f1b18', 0, 0], ['#dce8f0', -1, -1], ['#dce8f0', 1, -1]],
+  carrot: [['#f08a2a', 0, 0], ['#d86a1a', 1, 0], ['#4ea84a', -1, -1], ['#6fc85a', -2, -1]],
+  meat: [['#c43a4a', 0, 0], ['#e0586a', 1, 0], ['#8a1a28', 0, 1], ['#f0d0c0', 1, 1]],
+  seed: [['#e8d098', 0, 0], ['#c8a868', 1, 0], ['#f4e4b8', 0, 1]],
+  insect: [['#3a2418', 0, 0], ['#6a4a2a', 1, 0], ['#3a2418', 2, 0]],
+};
+
+/** Opções de pose de um quadro de quadrúpede. */
+function quadPose(p, frame) {
+  const sit = !!p.sitter;
+  switch (frame) {
+    case 'w0': return { walk: 1 };
+    case 'w1': return { walk: 2, bob: -1 };
+    case 'eat0': return sit ? { sit: true, paws: true } : { head: 'down' };
+    case 'eat1': return sit ? { sit: true, paws: true, mouth: true } : { head: 'down', mouth: true };
+    case 'act0': case 'act1': {
+      const b = frame === 'act1';
+      switch (p.act) {
+        case 'howl': return { head: 'up', mouth: b };
+        case 'yawn': return { mouth: b, eyesClosed: true, head: b ? 'up' : 'level' };
+        case 'lie': return { lie: true, head: b ? 'down' : 'level', eyesClosed: b };
+        case 'sit': return { sit: true, tall: b };
+        case 'alert': return { sit: true, tall: true, earsUp: b };
+        default: return {};
+      }
+    }
+    default: return {};
+  }
+}
+
+/** Corpo de quadrúpede: pernas, corpo, pescoço, cabeça, orelhas, chifres e cauda. */
+function drawQuad(p, frame) {
+  const g = newGrid(p.W, p.H);
+  const ps = quadPose(p, frame);
+  const R = p.fur, HR = p.headRamp || p.fur, gy = p.H - 3;
+  const brx = p.brx, bry = p.bry;
+  let bx = p.bx, by = gy - p.legLen - bry * 0.55 + (ps.bob || 0);
+  if (ps.lie) by = gy - bry * 0.85;
+  if (ps.sit) { by = gy - bry * (ps.tall ? 1.15 : 0.95); }
+  const hipY = by + bry * 0.55;
+  const legR = p.legs || R;
+  const sw = p.swing || 3;
+  // pernas
+  const legsDef = [
+    { x: bx - brx * 0.55, far: true, ph: ps.walk === 1 ? -1 : 1 },
+    { x: bx + brx * 0.58, far: true, ph: ps.walk === 1 ? -1 : 1 },
+    { x: bx - brx * 0.4, far: false, ph: ps.walk === 1 ? -1 : 1 },
+    { x: bx + brx * 0.7, far: false, ph: ps.walk === 1 ? 1 : -1 },
+  ];
+  // pernas do mesmo lado alternam: ajuste para marcha diagonal
+  legsDef[0].ph = ps.walk === 1 ? 1 : -1; legsDef[1].ph = ps.walk === 1 ? -1 : 1;
+  if (!ps.lie && !ps.sit) {
+    for (const l of legsDef) {
+      const off = ps.walk ? l.ph * sw : 0;
+      thickLine(g, l.x, hipY, l.x + off, gy, p.legW, (t, dx) => legR[l.far ? (dx < 0 ? 1 : 0) : (dx < 0 ? 2 : 1)]);
+      g.set(Math.round(l.x + off), gy, legR[0]);
+    }
+  } else if (ps.lie) {
+    fillBlob(g, bx + brx * 0.6, gy - 1.3, p.legW + 1.2, 1.5, legR, 0.1);
+    fillBlob(g, bx - brx * 0.5, gy - 1.5, p.legW + 2, 1.8, legR, 0.1);
+  } else {
+    fillBlob(g, bx - brx * 0.35, gy - bry * 0.6, brx * 0.5, bry * 0.7, R, 0.12);
+    thickLine(g, bx + brx * 0.55, by + bry * 0.4, bx + brx * 0.8, gy, p.legW, () => legR[1]);
+  }
+  // corpo
+  if (p.wool) {
+    for (const [dx, dy, r] of [[-0.55, 0.05, 4.2], [0, -0.35, 4.6], [0.5, 0.0, 4.2], [-0.2, 0.35, 4], [0.3, 0.4, 3.8], [-0.7, 0.4, 3.4], [0.75, 0.35, 3.2]]) fillBlob(g, bx + dx * brx, by + dy * bry, r, r * 0.9, R, 0.2);
+  } else {
+    fillBlob(g, bx, by, brx, bry, R, 0.14);
+    if (p.belly) blobOn(g, bx + brx * 0.1, by + bry * 0.62, brx * 0.85, bry * 0.42, p.belly, 0.1);
+  }
+  if (p.hump) fillBlob(g, bx - brx * 0.1, by - bry - 1.5, 4.2, 3.8, R, 0.14);
+  // cabeça e pescoço
+  const hr = p.headR * (p.cute === false ? 1 : 1.2);
+  let hx, hy, ang;
+  if (ps.sit) { hx = bx + brx * 0.55; hy = by - bry - hr * 0.45; ang = ps.paws ? 0.5 : 0.25; }
+  else if (ps.head === 'down') { hx = bx + brx + p.neck * 0.45 + 1; hy = gy - hr * 0.8; ang = 1.15; }
+  else if (ps.head === 'up') { hx = bx + brx * 0.85 + p.neck * 0.45; hy = by - bry - p.neck - hr * 0.1; ang = -0.5; }
+  else { hx = bx + brx + p.neck * 0.55; hy = by - bry * 0.5 - p.neck * 0.55 - hr * 0.05; ang = 0.2; }
+  if (ps.lie && ps.head !== 'down') { hy += 1; }
+  const nb = { x: bx + brx * 0.7, y: by - bry * 0.35 };
+  const nsteps = Math.max(6, Math.ceil(Math.hypot(hx - nb.x, hy - nb.y) / 0.9));
+  for (let i = 0; i <= nsteps; i++) { const t = i / nsteps; fillBlob(g, nb.x + (hx - nb.x) * t, nb.y + (hy - nb.y) * t, p.neckR + (hr * 0.8 - p.neckR) * t, (p.neckR + (hr * 0.8 - p.neckR) * t) * 0.95, HR, 0.12); }
+  fillBlob(g, hx, hy, hr, hr * 0.92, HR, 0.12);
+  const sx = hx + Math.cos(ang) * hr * 0.85, sy = hy + Math.sin(ang) * hr * 0.85;
+  fillBlob(g, sx, sy, p.snoutR, p.snoutR * 0.82, p.snout || HR, 0.1);
+  const tipX = sx + Math.cos(ang) * p.snoutR * 0.8, tipY = sy + Math.sin(ang) * p.snoutR * 0.8;
+  g.set(Math.round(tipX), Math.round(tipY), '#1f1410');
+  let mouth = { x: Math.round(tipX), y: Math.round(tipY + 1) };
+  if (ps.mouth) { for (let k = -1; k <= 1; k++) g.set(Math.round(sx + k), Math.round(sy + p.snoutR * 0.75), '#7a2a30'); mouth = { x: Math.round(sx + 1), y: Math.round(sy + p.snoutR * 0.9) }; }
+  // olho
+  {
+    const k = g.s || 1, ex = Math.round((hx + hr * 0.32) * k), ey = Math.round((hy - hr * 0.2) * k);
+    const big = hr * k >= 2.3;
+    if (ps.eyesClosed) { g.put(ex, ey, R[0]); if (big) g.put(ex + 1, ey, R[0]); }
+    else if (big) { for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) g.put(ex + dx, ey + dy, '#1a0f0a'); g.put(ex, ey, '#ffffff'); }
+    else g.put(ex, ey, '#1a0f0a');
+    if (big) g.put(ex - 1, ey + 2, '#eea0a4');
+  }
+  // orelhas
+  if (p.ear === 'long') {
+    const up = ps.earsUp || ps.tall ? 1 : 0;
+    for (const [dx, k] of [[-0.45, 0], [-0.1, 1]]) {
+      fillCapsule(g, hx + dx * hr, hy - hr * 0.7, hx + dx * hr - 1.2 + (up ? 0 : -2.2), hy - hr * 0.7 - p.earLen * (up ? 1 : 0.78), 1.35, k ? R : p.earIn || R);
+    }
+  } else if (p.ear === 'pointy') {
+    for (const dx of [-0.45, 0.0]) { const bx2 = hx + dx * hr, by2 = hy - hr * 0.7; for (let r = 0; r < 4; r++) for (let x = -(3 - r) / 2; x <= (3 - r) / 2; x++) g.set(Math.round(bx2 + x), by2 - r, R[dx < -0.2 ? 1 : 2]); g.set(Math.round(bx2), by2 - 1, p.earIn || '#2a1c14'); }
+  } else if (p.ear === 'short') {
+    fillBlob(g, hx - hr * 0.4, hy - hr * 0.78, 1.8, 1.6, HR, 0.1);
+    fillBlob(g, hx - hr * 0.05, hy - hr * 0.85, 1.6, 1.5, HR, 0.1);
+  }
+  if (p.antlers) {
+    const c = p.antlerColor || '#e0d0a8', ox = hx - hr * 0.3, oy = hy - hr * 0.8;
+    thickLine(g, ox, oy, ox - 2, oy - 5, 1, () => c); thickLine(g, ox - 2, oy - 5, ox - 5, oy - 9, 1, () => c); thickLine(g, ox - 2, oy - 5, ox + 1, oy - 9, 1, () => c); thickLine(g, ox - 1, oy - 2, ox + 2, oy - 4, 1, () => c);
+    thickLine(g, ox + 2, oy, ox + 1, oy - 4, 1, () => c); thickLine(g, ox + 1, oy - 4, ox + 4, oy - 8, 1, () => c);
+  }
+  if (p.horns) {
+    const hx0 = hx - hr * 0.2, hy0 = hy - hr * 0.8;
+    thickLine(g, hx0, hy0, hx0 - 3.5, hy0 - 6.5, 1.2, () => '#3a3026'); thickLine(g, hx0 + 1.8, hy0, hx0 - 1.2, hy0 - 6.8, 1.2, () => '#4a3e30');
+  }
+  // cauda
+  const ty = by - bry * 0.3;
+  if (p.tail === 'puff') fillBlob(g, bx - brx - 0.5, ty + 1, 2.2, 2.2, p.tailRamp || AR.white, 0.1);
+  else if (p.tail === 'short') fillBlob(g, bx - brx - 0.5, ty + 1, 1.8, 1.6, R, 0.1);
+  else if (p.tail === 'bushy') { for (let i = 0; i < 6; i++) fillBlob(g, bx - brx - 1 - i * 1.5, ty + 1.5 + i * 0.5, 2.6 - i * 0.12, 2.2, i > 3 ? (p.tailTip || R) : R, 0.12); }
+  else if (p.tail === 'long') thickLine(g, bx - brx, ty, bx - brx - 8, ty + 4 + (ps.walk ? 1 : 0), 1.6, (t) => R[t > 0.7 ? 1 : 2]);
+  else if (p.tail === 'curl') { thickLine(g, bx - brx, ty + 1, bx - brx - 4, ty + 5, 1.6, () => R[1]); thickLine(g, bx - brx - 4, ty + 5, bx - brx - 8, ty + 2, 1.6, () => R[2]); thickLine(g, bx - brx - 8, ty + 2, bx - brx - 7, ty - 3, 1.6, () => R[1]); }
+  if (p.spots) speckle(g, 9, p.spots, p.spotColor || '#3a2410', bx - brx, by - bry, bx + brx, by + bry);
+  // patas dianteiras na posição "mãos à boca"
+  if (ps.paws) { fillBlob(g, hx + 1.5, hy + hr * 0.9, 1.6, 1.3, p.snout || R, 0.1); fillBlob(g, hx - 0.5, hy + hr * 0.95, 1.4, 1.2, p.snout || R, 0.1); mouth = { x: Math.round(hx + 3), y: Math.round(hy + hr * 0.6) }; }
+  addOutline(g, p.outline || '#2a1a10');
+  return { g, mouth };
+}
+
+/** Ave em pé: corpo, pescoço, bico, asa e pernas; bica o chão ao comer. */
+function drawBird(p, frame) {
+  const g = newGrid(p.W, p.H);
+  const gy = p.H - 2, R = p.fur;
+  const walk = frame === 'w0' ? 1 : frame === 'w1' ? 2 : 0;
+  const peck = frame === 'eat0' || frame === 'eat1';
+  const flap = p.act === 'flap' && (frame === 'act0' || frame === 'act1');
+  const bx = p.bx, by = gy - p.legLen - p.bry - (walk === 2 ? 0 : 0) + (frame === 'w1' ? -1 : 0);
+  // pernas
+  if (p.legLen > 0) for (const [dx, ph] of [[-2.4, walk === 1 ? 1 : -1], [2.4, walk === 1 ? -1 : 1]]) thickLine(g, bx + dx, by + p.bry * 0.6, bx + dx + (walk ? ph * 2.5 : 0), gy, 1, () => p.legColor || '#e08a2a');
+  // cauda
+  fillBlob(g, bx - p.brx - 1.5, by + 0.5, p.tailLen, p.bry * 0.55, p.tailRamp || R, 0.12);
+  fillBlob(g, bx, by, p.brx, p.bry, R, 0.14);
+  if (p.belly) blobOn(g, bx + 0.5, by + p.bry * 0.55, p.brx * 0.85, p.bry * 0.45, p.belly, 0.1);
+  // pescoço e cabeça
+  const nb = { x: bx + p.brx * 0.55, y: by - p.bry * 0.5 };
+  let hx = bx + p.brx * 0.7 + 1, hy = by - p.bry - p.neck - p.headR * 0.4;
+  let ang = 0;
+  if (peck) { hx = bx + p.brx + p.neck * 0.7 + 1; hy = gy - p.headR * 0.7 - (p.legLen > 4 ? 0 : 0); ang = 1.1; }
+  else if (p.act === 'preen' && (frame === 'act0' || frame === 'act1')) { hx = bx - 1; hy = by - p.bry * 0.2; ang = frame === 'act1' ? 2.6 : 3.0; }
+  const neckR = p.neckR || p.headR * 0.55;
+  const bsteps = Math.max(5, Math.ceil(Math.hypot(hx - nb.x, hy - nb.y) / 0.8));
+  for (let i = 0; i <= bsteps; i++) { const t = i / bsteps; fillBlob(g, nb.x + (hx - nb.x) * t, nb.y + (hy - nb.y) * t, neckR, neckR, p.neckRamp || R, 0.1); }
+  fillBlob(g, hx, hy, p.headR, p.headR, p.headRamp || R, 0.1);
+  if (p.crest) fillBlob(g, hx - 1, hy - p.headR - 0.5, 1.6, 2.2, p.crest, 0.1);
+  const bl = p.beak, bc = p.beakColor || '#f0c040';
+  const bxp = hx + Math.cos(ang) * p.headR * 0.8, byp = hy + Math.sin(ang) * p.headR * 0.8;
+  const open = frame === 'eat1' || (frame === 'act1' && p.act === 'call');
+  thickLine(g, bxp, byp, bxp + Math.cos(ang) * bl, byp + Math.sin(ang) * bl + (p.beakCurve || 0), p.beakW || 1.6, () => bc);
+  if (open) g.set(Math.round(bxp + Math.cos(ang) * bl * 0.6), Math.round(byp + Math.sin(ang) * bl * 0.6 + 1), '#7a2a30');
+  {
+    const k = g.s || 1, ex = Math.round((hx + Math.cos(ang - 0.7) * p.headR * 0.55) * k), ey = Math.round((hy + Math.sin(ang - 0.7) * p.headR * 0.55) * k);
+    if (p.headR * k >= 1.8) { g.put(ex, ey, '#1a0f0a'); g.put(ex + 1, ey, '#1a0f0a'); g.put(ex, ey + 1, '#1a0f0a'); g.put(ex + 1, ey + 1, '#1a0f0a'); g.put(ex, ey, '#ffffff'); }
+    else g.put(ex, ey, '#1a0f0a');
+  }
+  // asa
+  if (flap) {
+    const up = frame === 'act1';
+    for (let i = 0; i < 5; i++) fillBlob(g, bx - 1 - i * 1.4, by - p.bry * (0.4 + i * 0.35) - (up ? 2 : 0), 2.4, 3.2, p.wing || R, 0.12);
+    for (let i = 0; i < 3; i++) fillBlob(g, bx - 2 - i * 1.6, by + (up ? -3 : 1) - i * 0.5, 2.8, 2.2, p.wing || R, 0.12);
+  } else fillBlob(g, bx - 0.5, by + 0.5, p.brx * 0.75, p.bry * 0.62, p.wing || R, 0.12);
+  if (p.speckle) speckle(g, 5, p.speckle[0], p.speckle[1], bx - p.brx, by - p.bry, bx + p.brx, by + p.bry);
+  const mouth = { x: Math.round(bxp + Math.cos(ang) * bl), y: Math.round(byp + Math.sin(ang) * bl + 1) };
+  addOutline(g, p.outline || '#2a1a10');
+  if (p.waterline) { for (let y = Math.floor(by + p.bry * 0.35); y < p.H; y++) for (let x = 0; x < p.W; x++) g.set(x, y, null); addOutline(g, p.outline || '#2a1a10'); }
+  return { g, mouth };
+}
+
+/** Sapo: pula; ao comer, lança a língua; ao "cantar", infla a garganta. */
+function drawFrog(p, frame) {
+  const g = newGrid(20, 16);
+  const air = frame === 'w1', crouch = frame !== 'w1';
+  const by = air ? 7 : 10;
+  fillBlob(g, 9, by, 5.5, air ? 3.6 : 4.2, AR.frog, 0.14);
+  blobOn(g, 9.5, by + 2, 4.4, 2, [AR.frog[3], AR.frog[3], '#d8e8a8', '#e8f0c0'], 0.1);
+  if (air) { thickLine(g, 5, by + 1, 1, by + 4, 2, () => AR.frog[1]); thickLine(g, 13, by + 1, 17, by + 4, 2, () => AR.frog[2]); }
+  else { fillBlob(g, 5.5, 12.5, 3.2, 2.2, AR.frog, 0.1); fillBlob(g, 13, 13, 2.2, 1.6, AR.frog, 0.1); }
+  fillBlob(g, 14.5, by - 1, 3.2, 2.8, AR.frog, 0.12);
+  fillBlob(g, 13.5, by - 4, 1.8, 1.8, AR.frog, 0.1); fillBlob(g, 16.5, by - 3.6, 1.6, 1.6, AR.frog, 0.1);
+  g.set(14, by - 4, '#1a0f0a'); g.set(17, by - 4, '#1a0f0a');
+  let mouth = { x: 18, y: by };
+  if (frame === 'eat1') { for (let k = 0; k < 7; k++) g.set(18 + k, by, '#e0707a'); mouth = { x: 25, y: by }; }
+  if (frame === 'act1') fillBlob(g, 16, by + 2.2, 2.6, 2.2, ['#a8742a', '#d0a040', '#e8c860', '#f4e090'], 0.1);
+  g.set(15, by, '#2a3a1a');
+  addOutline(g, '#10301a');
+  return { g, mouth, over: frame === 'eat1' };
+}
+
+/** Caranguejo: anda de lado; ao comer, leva as garras à boca; ao "acenar", ergue uma garra. */
+function drawCrab(p, frame) {
+  const g = newGrid(22, 14);
+  const w = frame === 'w1' ? 1 : 0;
+  for (const s of [-1, 1]) for (let i = 0; i < 3; i++) thickLine(g, 11 + s * 3, 9, 11 + s * (6 + i * 1.5) + (w ? s : 0), 12 - (i % 2 ? 0 : 1), 1, () => AR.crab[1]);
+  fillBlob(g, 11, 8, 6.4, 3.8, AR.crab, 0.14);
+  const wave = frame === 'act1';
+  for (const s of [-1, 1]) {
+    const up = (wave && s === 1) || frame === 'eat0' || frame === 'eat1';
+    const cx = 11 + s * 7.5, cy = up ? 3 : 6.5;
+    thickLine(g, 11 + s * 5, 7, cx, cy + 1.5, 1.6, () => AR.crab[2]);
+    fillBlob(g, cx, cy, 2.4, 2.2, AR.crab, 0.1);
+    g.set(Math.round(cx), Math.round(cy - 1), AR.crab[0]);
+  }
+  g.set(9, 4, '#1a0f0a'); g.set(13, 4, '#1a0f0a'); g.set(9, 3, AR.crab[2]); g.set(13, 3, AR.crab[2]);
+  addOutline(g, '#3a0e08');
+  return { g, mouth: { x: 11, y: 6 } };
+}
+
+/** Lagarto: corpo comprido; ao "tomar sol", faz flexões. */
+function drawLizard(p, frame) {
+  const g = newGrid(30, 14);
+  const w = frame === 'w1' ? 1 : frame === 'w0' ? -1 : 0;
+  const up = frame === 'act1';
+  const by = up ? 6 : 8;
+  thickLine(g, 3, by + 2, 11, by + 1, 3.4, (t, dx, dy) => AR.lizard[dy < 0 ? 2 : 1]);
+  thickLine(g, 11, by + 1, 21, by, 4, (t, dx, dy) => AR.lizard[dy < 0 ? 3 : 2]);
+  thickLine(g, 3, by + 2, 0, by + 4, 1.4, () => AR.lizard[1]);
+  fillBlob(g, 23.5, by - (up ? 1.5 : 0), 3.4, 2.6, AR.lizard, 0.12);
+  fillBlob(g, 26, by + 0.5 - (up ? 1.5 : 0), 2, 1.6, AR.lizard, 0.1);
+  g.set(24, by - 1 - (up ? 1 : 0), '#1a0f0a');
+  for (const [lx, far] of [[18, true], [20, false], [7, true], [9, false]]) {
+    const off = (lx > 14 ? w : -w);
+    thickLine(g, lx, by + 2, lx + 2 + off, up && lx > 14 ? 12 : 12, 1.2, () => AR.lizard[far ? 0 : 1]);
+  }
+  speckle(g, 3, 10, AR.lizard[0], 4, by - 2, 20, by + 3);
+  let mouth = { x: 28, y: by + 1 };
+  if (frame === 'eat0' || frame === 'eat1') { fillBlob(g, 26.5, by + 2.5, 2, 1.6, AR.lizard, 0.1); mouth = { x: 28, y: by + 4 }; }
+  if (frame === 'eat1') g.set(28, by + 2, '#7a2a30');
+  addOutline(g, '#3a2a10');
+  return { g, mouth };
+}
+
+/** Foca: corpo roliço que desliza; ao comer, ergue a cabeça com um peixe. */
+function drawSeal(p, frame) {
+  const g = newGrid(40, 18);
+  const w = frame === 'w1' ? 1 : 0;
+  const up = frame === 'eat0' || frame === 'eat1' || frame === 'act1';
+  fillBlob(g, 18, 12 - w, 13, 4.8, AR.seal, 0.14);
+  thickLine(g, 4, 13 - w, 0, 11 - w, 3, () => AR.seal[1]);
+  thickLine(g, 1, 11 - w, 0, 8 - w, 1.6, () => AR.seal[1]);
+  fillBlob(g, 29, up ? 6 : 9, 3.8, 3.6, AR.seal, 0.12);
+  fillBlob(g, 32.5, up ? 7 : 10, 2.2, 1.7, ['#8a94a4', '#a8b2c0', '#c4ccd8', '#dde3ea'], 0.1);
+  g.set(33, up ? 6 : 9, '#1a0f0a'); g.set(30, up ? 4 : 7, '#1a0f0a'); g.set(32, up ? 4 : 7, '#1a0f0a');
+  fillBlob(g, 25, 15, 2.6, 1.4, AR.seal, 0.1);
+  speckle(g, 11, 14, AR.seal[0], 6, 8, 26, 15);
+  if (frame === 'act0') for (const [x, y] of [[19, 7], [20, 6]]) g.set(x, y, AR.seal[3]);
+  addOutline(g, '#262c38');
+  return { g, mouth: { x: 34, y: up ? 8 : 11 } };
+}
+
+
+/** Lê um item da lista de itens e desenha seus pixels perto da boca. */
+function drawItem(ctx, kind, x, y, flip) {
+  const px = ITEM_PIXELS[kind];
+  if (!px) return;
+  for (const [c, dx, dy] of px) { ctx.fillStyle = c; ctx.fillRect(x + (flip ? -dx : dx), y + dy, 1, 1); }
+}
+
 const RB_F = ['#5e4230', '#8a6444', '#b48a5c', '#d4ae80'];
 const RB_CR = ['#d2b48c', '#e4cba6', '#f0dcc0', '#fbf0dc'];
 const RB_WH = ['#c8ccd8', '#e0e4ec', '#f4f6fa', '#ffffff'];
 const RB_OLD = ['#6a5a50', '#8e8070', '#b4a898', '#d4ccc0'];
 const RB_OLD_CR = ['#c4baae', '#d6cec2', '#e6e0d6', '#f4f0e8'];
+/** Lebre-da-neve: pelo branco-azulado. */
+const HARE_F = ['#9aa6b8', '#bcc6d4', '#dde3ec', '#f6f8fc'];
+const HARE_CR = ['#dde3ec', '#eaeff5', '#f4f7fb', '#ffffff'];
 
 /**
  * Desenha um quadro do coelho (olhando para a direita) em escala `s`.
  * Filhote: menor, cabeça grande; idoso: pelo grisalho.
- * @param {string} frame idle | w0 | w1 | eat0 | eat1 | act0 | act1 @param {number} s @param {boolean} kit @param {boolean} old
+ * @param {string} frame idle | w0 | w1 | eat0 | eat1 | act0 | act1 @param {number} s @param {boolean} kit @param {boolean} old @param {'brown'|'white'} [pal] pelagem (coelho marrom ou lebre branca)
  */
-function drawBunnyS(frame, s, kit, old) {
+function drawBunnyS(frame, s, kit, old, pal = 'brown') {
   const W = 16, H = 19, gy = 17, g = new ScaledGrid(W, H, s);
-  const F = old ? RB_OLD : RB_F, CR = old ? RB_OLD_CR : RB_CR, WH = RB_WH;
+  const white = pal === 'white', F = old ? RB_OLD : white ? HARE_F : RB_F, CR = old ? RB_OLD_CR : white ? HARE_CR : RB_CR, WH = RB_WH;
   const PINK = '#f09aa0', INNER = '#f4b4b4', EYE = '#2a1818';
   const P = (v) => Math.round(v * s), hs = kit ? 1.2 : 1, bs = kit ? 0.85 : 1;
   const ear = (bx, by, tx, ty) => {
@@ -2519,21 +2873,136 @@ function drawBunnyS(frame, s, kit, old) {
   return { g, mouth: { x: P(head[0] + 3.6), y: P(head[1] + 1.6) } };
 }
 
-/** Escala de cada fase da vida: filhote, jovem, adulto e idoso. */
-const STAGE_SCALE = [0.55, 0.8, 1, 1];
-const STAGE_ICON = ['🍼', '🌱', '💪', '👴'];
+// ---------------------------------------------------------------------
+// Presas selvagens: ficha de cada espécie (aparência, onde vive, vida, alimento e movimento),
+// todas ativas só de dia. Os predadores ainda não existem.
+// ---------------------------------------------------------------------
 
-/** Guarda os quadros do coelho de cada fase (e espelhados, para olhar à esquerda). */
-class RabbitSprites {
+/** Tamanho de cada fase da vida em relação ao adulto: filhote, jovem, adulto e idoso. */
+const STAGE_MUL = [0.6, 0.85, 1, 1];
+const STAGE_ICON = ['🍼', '🌱', '💪', '👴'];
+/** Ícones das causas de morte (para os avisos). */
+const DEATH_ICON = { idade: '⏳', fome: '🥕', acidente: '⚠️', frio: '🥶', lotacao: '🏘️' };
+
+const LIGHT_BELLY = ['#b89c7c', '#d0b898', '#e8d8c0', '#f6eee0'];
+
+/**
+ * Ciclo de vida (tempos em segundos de jogo; um ano de jogo = 9600 s):
+ * filhote até `kit`, jovem até `young` (maturidade), idoso nos últimos `old` s de vida;
+ * gestação `gest`, intervalo `cool` entre ninhadas, ninhada `litter`, lotação `cap` por grupo.
+ */
+function life(kit, young, old, lifeMin, lifeMax, gest, cool, litMin, litMax, cap, mateP = 0.01) {
+  return { kit, young, old, lifeMin, lifeMax, gest, cool, litter: [litMin, litMax], cap, mateP, poolMin: 30, breed: 2.2, mateRange: 220 };
+}
+
+/** Alimento do local: renascimento por estação, efeito da neve, tamanho da área e quanto cada refeição gasta. */
+function graze(area, use, snow = 0.85) { return { rate: [0.5, 0.6, 0.35, 0.12], snow, floor: 0.09, area, use, winterDrain: 0.6 }; }
+
+/** Insetos e pequenos bichos: muitos no calor, quase nenhum no frio. */
+const BUGS = { rate: [0.5, 0.7, 0.4, 0.05], snow: 0.9, floor: 0.03, area: 1, use: 0.4, winterDrain: 0.3 };
+
+/**
+ * Espécies. `spawn` = chance de uma célula do mapa ter um grupo, por bioma; `roam` = onde andam;
+ * `move` = velocidade (px/s) por fase, raio de passeio ao redor do abrigo, medo das pessoas (`shy`) e pulos.
+ */
+const PREY = {
+  rabbit: { name: 'Coelho', icon: '🐇', plan: 'bunny', scale: 1, pal: 'brown', den: 'burrow', cell: 140, group: [2, 4], minDist: 100,
+    spawn: { [BIOME.MEADOW]: 0.3, [BIOME.FOREST]: 0.18 }, roam: [BIOME.MEADOW, BIOME.FOREST, BIOME.HUMID, BIOME.BEACH],
+    life: life(150, 420, 1800, 6000, 9600, 120, 700, 2, 4, 7, 0.012), forage: graze(1, 0.5),
+    move: { speed: [30, 36, 40, 28], range: [20, 50, 90], shy: 55, hops: true, hopT: 0.17, hopLift: 3 }, item: 'grass' },
+  hare: { name: 'Lebre-da-neve', icon: '🐇', plan: 'bunny', scale: 1, pal: 'white', cell: 150, group: [2, 3], minDist: 110,
+    spawn: { [BIOME.SNOW]: 0.2, [BIOME.TUNDRA]: 0.2 }, roam: [BIOME.SNOW, BIOME.TUNDRA],
+    life: life(150, 420, 1500, 5000, 8000, 130, 800, 2, 3, 6, 0.012), forage: { rate: [0.45, 0.55, 0.4, 0.2], snow: 0.5, floor: 0.1, area: 1.2, use: 0.5, winterDrain: 0.6 },
+    move: { speed: [32, 40, 46, 30], range: [25, 60, 100], shy: 60, hops: true, hopT: 0.15, hopLift: 3 }, item: 'moss' },
+  sheep: { name: 'Ovelha-selvagem', icon: '🐑', plan: 'quad', scale: 0.6, cell: 170, group: [3, 6], minDist: 170, risk: 0.5,
+    p: { W: 36, H: 28, bx: 17, brx: 9, bry: 5.5, legLen: 5.5, legW: 2.2, swing: 2.5, neck: 2.5, neckR: 2.6, headR: 3.4, snoutR: 2.2, fur: AR.wool, wool: true, legs: AR.darkFace, headRamp: AR.darkFace, ear: 'short', tail: 'short', act: 'lie', outline: '#2a2622' },
+    spawn: { [BIOME.MEADOW]: 0.2 }, roam: [BIOME.MEADOW, BIOME.FOREST],
+    life: life(400, 1400, 3000, 16000, 26000, 300, 3600, 1, 2, 10, 0.006), forage: graze(2, 0.45),
+    move: { speed: [10, 12, 14, 9], range: [30, 70, 110], shy: 30 }, item: 'grass' },
+  deer: { name: 'Cervo', icon: '🦌', plan: 'quad', scale: 0.6, cell: 160, group: [2, 4], minDist: 150, risk: 0.4,
+    p: { W: 46, H: 42, bx: 18, brx: 9.5, bry: 5, legLen: 13, legW: 1.8, swing: 4, neck: 9, neckR: 2.5, headR: 3, snoutR: 1.9, fur: AR.deer, belly: ['#c8a07a', '#dcba98', '#ecd4b8', '#f6e8d4'], ear: 'short', tail: 'short', antlers: true, act: 'howl', outline: '#2a1a10' },
+    spawn: { [BIOME.FOREST]: 0.35, [BIOME.HUMID]: 0.25 }, roam: [BIOME.FOREST, BIOME.HUMID, BIOME.MEADOW],
+    life: life(450, 1600, 3000, 18000, 30000, 350, 4200, 1, 2, 8, 0.005), forage: graze(2.2, 0.55),
+    move: { speed: [18, 22, 26, 17], range: [40, 90, 130], shy: 60 }, item: 'leaf' },
+  squirrel: { name: 'Esquilo', icon: '🐿️', plan: 'quad', scale: 0.5, cell: 140, group: [1, 2], minDist: 120,
+    p: { W: 28, H: 24, bx: 11, brx: 5, bry: 3.6, legLen: 2.6, legW: 1.8, swing: 2, neck: 1, neckR: 2.2, headR: 2.8, snoutR: 1.4, fur: AR.squirrel, belly: LIGHT_BELLY, ear: 'short', tail: 'curl', sitter: true, act: 'alert', outline: '#3a1c0a' },
+    spawn: { [BIOME.FOREST]: 0.2 }, roam: [BIOME.FOREST, BIOME.MEADOW],
+    life: life(250, 700, 2000, 8000, 14000, 150, 1500, 2, 4, 4, 0.01), forage: { rate: [0.3, 0.4, 0.9, 0.15], snow: 0.6, floor: 0.08, area: 1.2, use: 0.5, winterDrain: 0.6 },
+    move: { speed: [28, 34, 40, 26], range: [20, 50, 80], shy: 44, hops: true, hopT: 0.2, hopLift: 2 }, item: 'nut' },
+  frog: { name: 'Sapo', icon: '🐸', plan: 'frog', scale: 0.65, cell: 120, group: [2, 4], minDist: 90, coldShelter: true,
+    spawn: { [BIOME.HUMID]: 0.2, [BIOME.SWAMP]: 0.25 }, roam: [BIOME.HUMID, BIOME.SWAMP],
+    life: life(120, 360, 1500, 5000, 8000, 90, 1100, 2, 4, 10, 0.012), forage: BUGS,
+    move: { speed: [20, 24, 30, 18], range: [15, 35, 60], shy: 30, hops: true, hopT: 0.22, hopLift: 2 }, item: 'fly' },
+  monkey: { name: 'Macaco', icon: '🐒', plan: 'quad', scale: 0.55, cell: 140, group: [3, 6], minDist: 120, risk: 0.4,
+    p: { W: 40, H: 34, bx: 19, brx: 6.5, bry: 5.5, legLen: 6, legW: 2.1, swing: 3, neck: 2, neckR: 3, headR: 3.8, snoutR: 2.2, fur: AR.monkey, snout: AR.skin, belly: ['#7e5434', '#a8743e', '#c8985e', '#dcb078'], ear: 'short', tail: 'curl', sitter: true, act: 'alert', outline: '#1f120a' },
+    spawn: { [BIOME.JUNGLE]: 0.6 }, roam: [BIOME.JUNGLE, BIOME.HUMID],
+    life: life(600, 2200, 4000, 20000, 32000, 400, 5000, 1, 1, 10, 0.005), forage: graze(2, 0.5, 0.1),
+    move: { speed: [20, 26, 30, 20], range: [30, 70, 110], shy: 40 }, item: 'banana' },
+  capybara: { name: 'Capivara', icon: '🦫', plan: 'quad', scale: 0.55, cell: 150, group: [3, 6], minDist: 140, risk: 0.5,
+    p: { W: 44, H: 30, bx: 20, brx: 11, bry: 6.2, legLen: 4.2, legW: 2.4, swing: 2.2, neck: 2.2, neckR: 3.4, headR: 3.4, snoutR: 2.8, fur: ['#4a3224', '#6a4a34', '#8a6444', '#aa8260'], belly: ['#8a6a4a', '#a8845e', '#c8a47a', '#e0c49a'], ear: 'short', tail: 'short', act: 'lie', outline: '#2a1a10' },
+    spawn: { [BIOME.SWAMP]: 0.35, [BIOME.JUNGLE]: 0.12, [BIOME.HUMID]: 0.12 }, roam: [BIOME.SWAMP, BIOME.JUNGLE, BIOME.HUMID, BIOME.BEACH],
+    life: life(350, 1300, 3000, 14000, 22000, 300, 3000, 2, 4, 9, 0.007), forage: graze(1.6, 0.45, 0.1),
+    move: { speed: [10, 13, 16, 9], range: [30, 60, 100], shy: 35 }, item: 'grass' },
+  gazelle: { name: 'Gazela', icon: '🦌', plan: 'quad', scale: 0.58, cell: 160, group: [3, 6], minDist: 150, risk: 0.5,
+    p: { W: 46, H: 40, bx: 19, brx: 8.6, bry: 4.4, legLen: 13, legW: 1.7, swing: 4.2, neck: 8, neckR: 2.2, headR: 2.8, snoutR: 1.8, fur: ['#7a5a34', '#a47c48', '#c8a066', '#e2c28a'], belly: ['#e8d8bc', '#f2e6d0', '#f8f0e0', '#fffaf0'], ear: 'short', tail: 'short', horns: true, act: 'howl', outline: '#3a2610' },
+    spawn: { [BIOME.DESERT]: 0.3, [BIOME.MEADOW]: 0.05 }, roam: [BIOME.DESERT, BIOME.MEADOW],
+    life: life(380, 1400, 3000, 14000, 24000, 300, 3600, 1, 2, 9, 0.006), forage: { rate: [0.5, 0.25, 0.25, 0.3], snow: 0, floor: 0.1, area: 2.4, use: 0.45, winterDrain: 0.7 },
+    move: { speed: [22, 28, 34, 20], range: [40, 90, 140], shy: 65 }, item: 'leaf' },
+  lizard: { name: 'Lagarto', icon: '🦎', plan: 'lizard', scale: 0.6, cell: 130, group: [2, 4], minDist: 80,
+    spawn: { [BIOME.DESERT]: 0.22 }, roam: [BIOME.DESERT, BIOME.BEACH],
+    life: life(150, 500, 2000, 7000, 12000, 100, 1000, 2, 5, 8, 0.01), forage: { rate: [0.5, 0.7, 0.4, 0.3], snow: 0.9, floor: 0.05, area: 1, use: 0.35, winterDrain: 0.5 },
+    move: { speed: [26, 32, 38, 24], range: [15, 40, 70], shy: 40 }, item: 'insect' },
+  reindeer: { name: 'Rena', icon: '🦌', plan: 'quad', scale: 0.58, cell: 170, group: [3, 6], minDist: 160, risk: 0.5,
+    p: { W: 46, H: 40, bx: 18, brx: 9.5, bry: 5, legLen: 12, legW: 2, swing: 4, neck: 7, neckR: 2.7, headR: 3.1, snoutR: 2, fur: AR.reindeer, belly: AR.white, ear: 'short', tail: 'short', antlers: true, antlerColor: '#ece0c0', act: 'lie', outline: '#3a3028' },
+    spawn: { [BIOME.TUNDRA]: 0.2, [BIOME.SNOW]: 0.1 }, roam: [BIOME.TUNDRA, BIOME.SNOW],
+    life: life(450, 1500, 3000, 18000, 30000, 350, 4200, 1, 2, 10, 0.005), forage: { rate: [0.4, 0.5, 0.35, 0.2], snow: 0.4, floor: 0.12, area: 2.6, use: 0.5, winterDrain: 0.6 },
+    move: { speed: [16, 20, 24, 16], range: [40, 90, 140], shy: 55 }, item: 'moss' },
+  seal: { name: 'Foca', icon: '🦭', plan: 'seal', scale: 0.6, cell: 110, group: [2, 3], minDist: 80, maxT: 0.33, nearWater: true, risk: 0.4,
+    spawn: { [BIOME.ICECAP]: 0.4, [BIOME.BEACH]: 0.3 }, roam: [BIOME.ICECAP, BIOME.BEACH],
+    life: life(500, 1800, 4000, 22000, 36000, 400, 5200, 1, 1, 8, 0.005), forage: { rate: [0.45, 0.45, 0.45, 0.35], snow: 0, floor: 0.3, area: 1.5, use: 0.4, winterDrain: 0.7 },
+    move: { speed: [8, 10, 12, 7], range: [20, 40, 60], shy: 35 }, item: 'fish' },
+  crab: { name: 'Caranguejo', icon: '🦀', plan: 'crab', scale: 0.6, cell: 110, group: [2, 4], minDist: 70,
+    spawn: { [BIOME.BEACH]: 0.3 }, roam: [BIOME.BEACH],
+    life: life(120, 350, 1500, 5000, 8000, 90, 1000, 2, 4, 10, 0.012), forage: { rate: [0.5, 0.5, 0.5, 0.35], snow: 0.3, floor: 0.2, area: 1, use: 0.3, winterDrain: 0.6 },
+    move: { speed: [18, 22, 26, 16], range: [12, 30, 50], shy: 30, sideways: true }, item: 'moss' },
+  duck: { name: 'Pato', icon: '🦆', plan: 'bird', scale: 0.55, cell: 100, group: [2, 4], minDist: 70, water: true, coldShelter: true, minT: 0.35,
+    p: { W: 26, H: 20, bx: 11, brx: 6, bry: 3.8, legLen: 0, neck: 2, headR: 2.8, beak: 3.6, beakColor: '#e8c030', beakW: 1.8, fur: AR.duck, headRamp: AR.green, wing: ['#4a3c2c', '#6a5a44', '#8a7a60', '#aa9a7c'], tailLen: 3, waterline: true, act: 'preen', outline: '#2a2218' },
+    spawn: { [BIOME.LAKE]: 0.3 }, roam: [BIOME.LAKE],
+    life: life(200, 600, 2400, 8000, 14000, 120, 1500, 3, 6, 8, 0.01), forage: { rate: [0.5, 0.6, 0.45, 0.2], snow: 0.5, floor: 0.05, area: 1.4, use: 0.35, winterDrain: 0.6 },
+    move: { speed: [9, 11, 13, 8], range: [20, 40, 60], shy: 36 }, item: 'leaf' },
+};
+for (const s of Object.values(PREY)) s.roamSet = new Set(s.roam);
+
+/** Monta um quadro de uma espécie numa fase da vida. @returns {{g: ScaledGrid|PixelGrid, mouth: {x: number, y: number}}} */
+function buildCreatureFrame(sp, frame, stage) {
+  const S = PREY[sp], sc = S.scale * STAGE_MUL[stage];
+  if (S.plan === 'bunny') return drawBunnyS(frame, sc, stage === 0, stage === 3, S.pal);
+  CUR_SCALE = sc;
+  let r;
+  switch (S.plan) {
+    case 'frog': r = drawFrog(S.p || {}, frame); break;
+    case 'lizard': r = drawLizard(S.p || {}, frame); break;
+    case 'seal': r = drawSeal(S.p || {}, frame); break;
+    case 'crab': r = drawCrab(S.p || {}, frame); break;
+    case 'bird': r = drawBird(S.p, frame); break;
+    default: r = drawQuad(S.p, frame);
+  }
+  if (r.mouth) r.mouth = { x: Math.round(r.mouth.x * sc), y: Math.round(r.mouth.y * sc) };
+  CUR_SCALE = 1;
+  return r;
+}
+
+/** Guarda os quadros de cada espécie e fase (e espelhados, para olhar à esquerda). */
+class CreatureSprites {
   constructor() { this.cache = {}; }
 
   /** @returns {{canvas: HTMLCanvasElement, mouth: {x: number, y: number}}} */
-  get(frame, stage, left = false) {
-    const key = `${frame}:${stage}`;
+  get(sp, frame, stage, left = false) {
+    const key = `${sp}:${frame}:${stage}`;
     let e = this.cache[key];
     if (!e) {
-      const r = drawBunnyS(frame, STAGE_SCALE[stage], stage === 0, stage === 3);
-      e = { canvas: r.g.toCanvas(), mirror: null, g: r.g, mouth: r.mouth };
+      const r = buildCreatureFrame(sp, frame, stage);
+      e = { canvas: r.g.toCanvas(), mirror: null, g: r.g, mouth: r.mouth || { x: r.g.w - 2, y: 3 } };
       this.cache[key] = e;
     }
     if (left) {
@@ -2560,27 +3029,27 @@ function makeBurrowSprite() {
   for (const [a, b] of [[2, 1], [11, 6], [12, 2]]) px(a, b, '#cdb089');
   return c;
 }
+// ---------------------------------------------------------------------
+// Ecologia das presas: população do mundo todo (nascimentos, mortes, dispersão, novos grupos)
+// e os animais em cena perto da câmera (só de dia; à noite e na tempestade se recolhem).
+// ---------------------------------------------------------------------
 
-// ---------- dados do ciclo de vida ----------
-/**
- * Tempos em segundos de jogo: filhote até 150, jovem até 420 (maturidade), adulto até 30 min antes do fim da vida, depois idoso; vida de 100 a 160 min (1 a 1,7 anos de jogo).
- * Gestação de 120 s e intervalo de 700 s entre ninhadas; ninhada de 2 a 4; lotação de 7 por toca; só nascem filhotes se houver pasto.
- */
-const RABBIT = { kit: 150, young: 420, adult: 2400, gest: 120, cool: 700, lifeMin: 6000, lifeMax: 9600, cap: 7, cell: 140 };
-let RABBIT_SEQ = 1;
+let CREATURE_SEQ = 1;
 
-/** Um coelho (dados que existem o tempo todo, mesmo longe da câmera). */
-class Rabbit {
-  /** @param {'M'|'F'} sex @param {number} age */
-  constructor(sex, age) {
-    this.id = RABBIT_SEQ++;
+/** Um animal (dados que existem o tempo todo, mesmo longe da câmera). */
+class Creature {
+  /** @param {string} sp espécie @param {'M'|'F'} sex @param {number} age */
+  constructor(sp, sex, age) {
+    const L = PREY[sp].life;
+    this.id = CREATURE_SEQ++;
+    this.sp = sp;
     this.sex = sex;
     this.age = age;
-    this.life = RABBIT.lifeMin + Math.random() * (RABBIT.lifeMax - RABBIT.lifeMin);
+    this.life = L.lifeMin + Math.random() * (L.lifeMax - L.lifeMin);
     this.food = 70 + Math.random() * 25;
     this.health = 100;
     this.preg = 0;
-    this.cool = Math.random() * 240;
+    this.cool = Math.random() * L.cool * 0.3;
     this.mated = -1e9;
     this.checked = false;
     this.dead = false;
@@ -2588,220 +3057,248 @@ class Rabbit {
   }
 
   /** @returns {number} fase: 0 filhote, 1 jovem, 2 adulto, 3 idoso */
-  get stage() { return this.age < RABBIT.kit ? 0 : this.age < RABBIT.young ? 1 : this.age < this.life - 1800 ? 2 : 3; }
+  get stage() {
+    const L = PREY[this.sp].life;
+    return this.age < L.kit ? 0 : this.age < L.young ? 1 : this.age < this.life - L.old ? 2 : 3;
+  }
 }
 
-/** Uma toca com a família que mora nela e o capim disponível ao redor ("pasto"). */
-class Warren {
-  constructor(id, x, y) {
+/** Um grupo (família, bando ou rebanho) com seu abrigo/território e o alimento disponível ao redor ("pasto"). */
+class Group {
+  constructor(id, sp, x, y) {
     this.id = id;
+    this.sp = sp;
     this.x = x;
     this.y = y;
-    /** @type {Rabbit[]} */
+    /** @type {Creature[]} */
     this.members = [];
     this.pool = 60 + Math.random() * 30;
     this.snow = 0;
     this.skey = -1;
     this.near = false;
+    this.acc = 0;
     this.rect = null;
   }
 }
 
-const RABBIT_BIOMES = new Set([BIOME.MEADOW, BIOME.FOREST, BIOME.HUMID, BIOME.BEACH]);
-
-/** Simula a população de coelhos do mundo todo: nascimentos, mortes, dispersão e novas tocas. */
+/** Simula as presas do mundo todo: cada espécie em seus biomas, com ciclo de vida e repovoamento. */
 class Ecology {
   /** @param {World} world @param {{x: number, y: number}} spawn */
   constructor(world, spawn) {
     this.world = world;
-    /** @type {Warren[]} */
-    this.warrens = [];
-    this.stats = { births: 0, deaths: { idade: 0, fome: 0, acidente: 0, frio: 0, lotacao: 0 }, dispersed: 0, colonized: 0 };
+    /** @type {Group[]} */
+    this.groups = [];
+    this.stats = { births: 0, deaths: { idade: 0, fome: 0, acidente: 0, frio: 0, lotacao: 0 }, dispersed: 0, colonized: 0, immigrated: 0 };
+    /** Contagens por espécie: grupos e população iniciais, nascimentos e mortes. */
+    this.bySp = {};
     /** @type {Array<object>} */
     this.events = [];
     this.nextId = 1;
     this.immT = 0;
-    this.stats.immigrated = 0;
-    const S = RABBIT.cell;
-    for (let cy = 0; cy * S < world.h; cy++) for (let cx = 0; cx * S < world.w; cx++) {
-      const x = (cx + 0.15 + 0.7 * hash2(cx * 3 + 1, cy * 5 + 2)) * S, y = (cy + 0.15 + 0.7 * hash2(cx * 7 + 3, cy * 11 + 4)) * S;
-      const b = world.biomeAt(x, y), p = b === BIOME.MEADOW ? 0.3 : b === BIOME.FOREST ? 0.18 : 0;
-      if (!p || hash2(cx * 13 + 5, cy * 17 + 6) > p || !world.canStand(x, y)) continue;
-      this.addWarren(x, y, true);
-    }
-    this.initialWarrens = this.warrens.length;
-    this.maxWarrens = Math.round(this.warrens.length * 1.5) + 2;
-    this.initialTotal = this.warrens.reduce((s, w) => s + w.members.length, 0);
-    // garante uma toca perto de onde o jogo começa
-    if (!this.warrens.some((w) => Math.hypot(w.x - spawn.x, w.y - spawn.y) < 240)) {
-      for (let r = 110; r < 220; r += 15) for (let a = 0; a < 6.28; a += 0.5) {
-        const x = spawn.x + Math.cos(a) * r, y = spawn.y + Math.sin(a) * r;
-        if (this.validSpot(x, y, 80)) { this.addWarren(x, y, true); r = 999; break; }
+    let si = 0;
+    for (const sp of Object.keys(PREY)) {
+      si++;
+      this.bySp[sp] = { births: 0, deaths: 0, initialTotal: 0, initialGroups: 0, maxGroups: 0 };
+      const S = PREY[sp], C = S.cell;
+      for (let cy = 0; cy * C < world.h; cy++) for (let cx = 0; cx * C < world.w; cx++) {
+        const x = (cx + 0.15 + 0.7 * hash2(cx * 3 + si, cy * 5 + 2)) * C, y = (cy + 0.15 + 0.7 * hash2(cx * 7 + 3, cy * 11 + si)) * C;
+        const b = world.biomeAt(x, y), p = S.spawn[b];
+        if (!p || hash2(cx * 13 + si * 101 + 5, cy * 17 + 6) > p || !this.validSpot(sp, x, y, S.minDist)) continue;
+        this.addGroup(sp, x, y, true);
       }
+      // todas as espécies de um ambiente próximo do início: pelo menos o coelho
+      if (sp === 'rabbit' && !this.groups.some((g) => g.sp === sp && Math.hypot(g.x - spawn.x, g.y - spawn.y) < 240)) {
+        for (let r = 110; r < 220; r += 15) for (let a = 0; a < 6.28; a += 0.5) {
+          const x = spawn.x + Math.cos(a) * r, y = spawn.y + Math.sin(a) * r;
+          if (this.validSpot(sp, x, y, 80)) { this.addGroup(sp, x, y, true); r = 999; break; }
+        }
+      }
+      const gs = this.groups.filter((g) => g.sp === sp);
+      this.bySp[sp].initialGroups = gs.length;
+      this.bySp[sp].initialTotal = gs.reduce((s, g) => s + g.members.length, 0);
+      this.bySp[sp].maxGroups = Math.round(gs.length * 1.5) + 2;
     }
   }
 
-  /** @returns {boolean} se dá para cavar uma toca ali (terreno livre e longe de outras tocas) */
-  validSpot(x, y, minDist) {
-    const w = this.world;
-    if (!RABBIT_BIOMES.has(w.biomeAt(x, y)) || !w.canStand(x, y) || w.biomeAt(x, y) === BIOME.BEACH) return false;
-    return !this.warrens.some((o) => Math.hypot(o.x - x, o.y - y) < minDist);
+  /** @returns {boolean} se a espécie pode viver ali (bioma, clima, água por perto) e não há outro grupo dela muito perto */
+  validSpot(sp, x, y, minDist) {
+    const S = PREY[sp], w = this.world, b = w.biomeAt(x, y), t = w.tmp.t;
+    if (!S.roamSet.has(b)) return false;
+    if ((S.minT !== undefined && t < S.minT) || (S.maxT !== undefined && t > S.maxT)) return false;
+    if (!S.water && !w.canStand(x, y)) return false;
+    if (S.nearWater && waterBiomeNear(w, x, y, 40) < 0) return false;
+    if (S.den === 'burrow' && b === BIOME.BEACH) return false;
+    return !this.groups.some((g) => g.sp === sp && Math.hypot(g.x - x, g.y - y) < minDist);
   }
 
-  /** Cria uma toca (com uma família inicial, se `populate`). */
-  addWarren(x, y, populate) {
-    const w = new Warren(this.nextId++, x, y);
+  /** Cria um grupo (com a família inicial, se `populate`). */
+  addGroup(sp, x, y, populate) {
+    const S = PREY[sp], L = S.life, g = new Group(this.nextId++, sp, x, y);
     if (populate) {
-      const n = 2 + Math.floor(Math.random() * 3);
-      for (let i = 0; i < n; i++) w.members.push(new Rabbit(i % 2 ? 'M' : 'F', 500 + Math.random() * 1900));
-      for (let i = 0; i < Math.floor(Math.random() * 3); i++) w.members.push(new Rabbit(Math.random() < 0.5 ? 'M' : 'F', 160 + Math.random() * 250));
+      const n = S.group[0] + Math.floor(Math.random() * (S.group[1] - S.group[0] + 1));
+      for (let i = 0; i < n; i++) g.members.push(new Creature(sp, i % 2 ? 'M' : 'F', L.young + 60 + Math.random() * L.lifeMin * 0.4));
+      for (let i = 0; i < Math.floor(Math.random() * 3); i++) g.members.push(new Creature(sp, Math.random() < 0.5 ? 'M' : 'F', L.kit + Math.random() * (L.young - L.kit)));
     }
-    this.warrens.push(w);
-    return w;
+    this.groups.push(g);
+    return g;
   }
 
-  /** Remove um coelho da toca e registra a causa da morte. */
-  kill(w, m, cause) {
-    const i = w.members.indexOf(m);
-    if (i >= 0) w.members.splice(i, 1);
+  /** Remove um animal do grupo e registra a causa da morte. */
+  kill(g, m, cause) {
+    const i = g.members.indexOf(m);
+    if (i >= 0) g.members.splice(i, 1);
     m.dead = true;
     this.stats.deaths[cause]++;
-    this.events.push({ type: 'death', x: w.x, y: w.y, cause, stage: m.stage });
+    this.bySp[g.sp].deaths++;
+    this.events.push({ type: 'death', sp: g.sp, x: g.x, y: g.y, cause, stage: m.stage });
   }
 
-  /** Jovem que cresceu: se a toca está cheia (ou por instinto), vai morar em outra ou funda uma nova. */
-  disperse(w, m) {
-    const targets = this.warrens.filter((o) => o !== w && o.members.length < 4 && Math.hypot(o.x - w.x, o.y - w.y) < 520).sort((a, b) => a.members.length - b.members.length || Math.hypot(a.x - w.x, a.y - w.y) - Math.hypot(b.x - w.x, b.y - w.y));
-    const move = (to, list) => {
-      for (const r of list) { w.members.splice(w.members.indexOf(r), 1); r.actor = null; to.members.push(r); }
-    };
-    if (targets.length && Math.random() < 0.85) {
-      move(targets[0], [m]);
-      this.stats.dispersed++;
-      this.events.push({ type: 'move', x: w.x, y: w.y });
-      return;
-    }
-    for (let k = 0; k < 8 && this.warrens.length < this.maxWarrens; k++) {
-      const a = Math.random() * 6.28, r = 150 + Math.random() * 110, x = w.x + Math.cos(a) * r, y = w.y + Math.sin(a) * r;
-      if (!this.validSpot(x, y, 100)) continue;
-      const nw = this.addWarren(x, y, false);
-      const mate = w.members.find((o) => o !== m && o.stage === 1 && o.sex !== m.sex);
-      move(nw, mate ? [m, mate] : [m]);
+  /** Jovem que cresceu: se o grupo está cheio (ou por instinto), vai para outro grupo ou funda um novo. */
+  disperse(g, m) {
+    const S = PREY[g.sp], L = S.life, reach = S.cell * 3;
+    const targets = this.groups.filter((o) => o !== g && o.sp === g.sp && o.members.length < L.cap * 0.55 && Math.hypot(o.x - g.x, o.y - g.y) < reach)
+      .sort((a, b) => a.members.length - b.members.length || Math.hypot(a.x - g.x, a.y - g.y) - Math.hypot(b.x - g.x, b.y - g.y));
+    const move = (to, list) => { for (const r of list) { g.members.splice(g.members.indexOf(r), 1); r.actor = null; to.members.push(r); } };
+    if (targets.length && Math.random() < 0.85) { move(targets[0], [m]); this.stats.dispersed++; return; }
+    const count = this.groups.reduce((n, o) => n + (o.sp === g.sp ? 1 : 0), 0);
+    for (let k = 0; k < 8 && count < this.bySp[g.sp].maxGroups; k++) {
+      const a = Math.random() * 6.28, r = S.cell * (1 + Math.random() * 0.8), x = g.x + Math.cos(a) * r, y = g.y + Math.sin(a) * r;
+      if (!this.validSpot(g.sp, x, y, S.minDist)) continue;
+      const ng = this.addGroup(g.sp, x, y, false);
+      const mate = g.members.find((o) => o !== m && o.stage === 1 && o.sex !== m.sex);
+      move(ng, mate ? [m, mate] : [m]);
       this.stats.colonized++;
-      this.events.push({ type: 'colonize', x: nw.x, y: nw.y });
+      this.events.push({ type: 'colonize', sp: g.sp, x: ng.x, y: ng.y });
       return;
     }
   }
 
-  /** Um passo de tempo para todas as tocas. @param {number} dt @param {{sp: number, clock: number, dark: number}} env */
-  update(dt, env) {
-    const si = Math.floor(env.sp) % 4, asleep = env.dark > 0.55;
-    for (const w of this.warrens) {
-      if (w.skey !== this.world.skey) {
-        const b = this.world.biomeAt(w.x, w.y);
-        w.snow = seasonLookAt(b, this.world.tmp.t, this.world.spq).snow;
-        w.skey = this.world.skey;
-      }
-      // pasto: renasce conforme a estação (quase nada sob a neve)
-      w.pool += Math.max([0.5, 0.6, 0.35, 0.12][si] * (1 - 0.85 * w.snow), 0.09) * (1 - w.pool / 100) * dt;
-      w.pool = clamp(w.pool, 0, 100);
-      for (const m of w.members.slice()) {
-        m.age += dt;
-        const st = m.stage;
-        if (st === 0 && m.age < 120) m.food = Math.max(m.food, 70);
-        else {
-          m.food -= 0.12 * dt * (asleep ? 0.45 : 1) * (si === 3 ? 0.6 : 1);
-          // longe da câmera os coelhos comem "por conta"; perto, eles comem de verdade (ver RabbitActor)
-          if (!w.near && !asleep && m.food < 60 && w.pool > 3) { const eat = Math.min(60 - m.food, 0.2 * dt); m.food += eat; w.pool -= eat * 0.5; }
-        }
-        if (m.food <= 0) { m.food = 0; m.health -= 0.25 * dt; } else m.health = Math.min(100, m.health + 0.08 * dt);
-        if (m.health <= 0) { this.kill(w, m, 'fome'); continue; }
-        if (m.age >= m.life) { this.kill(w, m, 'idade'); continue; }
-        if (Math.random() < 3e-5 * dt) { this.kill(w, m, 'acidente'); continue; }
-        if (st === 0 && si === 3 && Math.random() < 0.0025 * dt) { this.kill(w, m, 'frio'); continue; }
-        if (st === 1 && !m.checked && m.age > RABBIT.young - 8) {
-          m.checked = true;
-          if (w.members.length > 4 || Math.random() < 0.45) { this.disperse(w, m); continue; }
-        }
-        if (m.sex === 'F' && st >= 2) {
-          m.cool -= dt;
-          if (m.preg > 0) {
-            m.preg -= dt;
-            if (m.preg <= 0) this.birth(w, m);
-          } else if (m.cool <= 0 && env.sp < 2.2 && m.food > 55 && w.pool > 30 && Math.random() < 0.012 * dt && this.maleNear(w)) {
-            m.preg = RABBIT.gest;
-            m.mated = env.clock;
-            this.events.push({ type: 'mate', x: w.x, y: w.y });
-          }
-        }
-      }
-    }
-    // rede de segurança: se quase não restam coelhos, um casal chega de fora do mapa a uma toca vazia
-    this.immT += dt;
-    if (this.immT > 1200) {
-      this.immT = 0;
-      const total = this.warrens.reduce((s, w) => s + w.members.length, 0);
-      if (total < this.initialTotal * 0.2) {
-        const empty = this.warrens.filter((w) => w.members.length < 2);
-        if (empty.length) {
-          const w = empty[Math.floor(Math.random() * empty.length)];
-          w.members.push(new Rabbit('M', 600), new Rabbit('F', 600));
-          this.stats.immigrated++;
-          this.events.push({ type: 'colonize', x: w.x, y: w.y });
-        }
-      }
-    }
-    if (this.events.length > 60) this.events.splice(0, this.events.length - 60);
-  }
-
-  /** @returns {boolean} se há um macho adulto na toca ou numa toca vizinha (até 220 px) */
-  maleNear(w) {
-    for (const o of this.warrens) {
-      if (o !== w && Math.hypot(o.x - w.x, o.y - w.y) > 220) continue;
+  /** @returns {boolean} se há um macho adulto no grupo ou num grupo vizinho da espécie */
+  maleNear(g) {
+    const R = PREY[g.sp].life.mateRange;
+    for (const o of this.groups) {
+      if (o.sp !== g.sp || (o !== g && Math.hypot(o.x - g.x, o.y - g.y) > R)) continue;
       if (o.members.some((m) => m.sex === 'M' && m.stage >= 2)) return true;
     }
     return false;
   }
 
-  /** Nasce uma ninhada (menor se a mãe estiver mal alimentada; na toca lotada, parte dos filhotes não sobrevive). */
-  birth(w, mother) {
-    const n = clamp(Math.round(2 + (mother.food - 60) / 30 + Math.random() * 1.5), 2, 4);
-    let born = 0;
-    for (let i = 0; i < n; i++) {
-      if (w.members.length >= RABBIT.cap && Math.random() < 0.5) { this.stats.deaths.lotacao++; continue; }
-      w.members.push(new Rabbit(Math.random() < 0.5 ? 'M' : 'F', 0));
-      born++;
+  /** Um passo de tempo (`d` s) para um grupo. */
+  stepGroup(g, d, env, si, asleep) {
+    const S = PREY[g.sp], L = S.life, F = S.forage;
+    if (g.skey !== this.world.skey) {
+      const b = this.world.biomeAt(g.x, g.y);
+      g.snow = seasonLookAt(b, this.world.tmp.t, this.world.spq).snow;
+      g.skey = this.world.skey;
     }
-    mother.cool = RABBIT.cool;
-    this.stats.births += born;
-    this.events.push({ type: 'birth', x: w.x, y: w.y, n: born });
+    // alimento do local: renasce conforme a estação (menos sob a neve)
+    g.pool += Math.max(F.rate[si] * (1 - F.snow * g.snow), F.floor) * F.area * (1 - g.pool / 100) * d;
+    g.pool = clamp(g.pool, 0, 100);
+    for (const m of g.members.slice()) {
+      m.age += d;
+      const st = m.stage;
+      if (st === 0 && m.age < L.kit * 0.8) m.food = Math.max(m.food, 70);
+      else {
+        m.food -= 0.12 * d * (asleep ? 0.45 : 1) * (si === 3 ? F.winterDrain : 1);
+        // longe da câmera os animais comem "por conta"; perto, eles comem de verdade (ver CreatureActor)
+        if (!g.near && !asleep && m.food < 60 && g.pool > 3) { const eat = Math.min(60 - m.food, 0.2 * d); m.food += eat; g.pool -= eat * F.use; }
+      }
+      if (m.food <= 0) { m.food = 0; m.health -= 0.25 * d; } else m.health = Math.min(100, m.health + 0.08 * d);
+      if (m.health <= 0) { this.kill(g, m, 'fome'); continue; }
+      if (m.age >= m.life) { this.kill(g, m, 'idade'); continue; }
+      if (Math.random() < 3e-5 * (S.risk ?? 1) * d) { this.kill(g, m, 'acidente'); continue; }
+      if (st === 0 && si === 3 && g.snow > 0.3 && Math.random() < 0.0025 * d) { this.kill(g, m, 'frio'); continue; }
+      if (st === 1 && !m.checked && m.age > L.young - 8) {
+        m.checked = true;
+        if (g.members.length > L.cap * 0.6 || Math.random() < 0.45) { this.disperse(g, m); continue; }
+      }
+      if (m.sex === 'F' && st >= 2) {
+        m.cool -= d;
+        if (m.preg > 0) {
+          m.preg -= d;
+          if (m.preg <= 0) this.birth(g, m);
+        } else if (m.cool <= 0 && env.sp < L.breed && m.food > 55 && g.pool > L.poolMin && g.members.length < L.cap && Math.random() < L.mateP * d && this.maleNear(g)) {
+          m.preg = L.gest;
+          m.mated = env.clock;
+        }
+      }
+    }
   }
 
-  /** @returns {Warren|null} toca perto do ponto */
-  burrowAt(x, y) { return this.warrens.find((w) => Math.hypot(w.x - x, w.y - y) < 9) || null; }
-
-  /** Contagens da população (para o painel de ecologia). */
-  census() {
-    const c = { total: 0, stages: [0, 0, 0, 0], males: 0, females: 0, pregnant: 0, warrens: this.warrens.length, empty: 0, pool: 0 };
-    for (const w of this.warrens) {
-      if (!w.members.length) c.empty++;
-      c.pool += w.pool;
-      for (const m of w.members) { c.total++; c.stages[m.stage]++; if (m.sex === 'M') c.males++; else c.females++; if (m.preg > 0) c.pregnant++; }
+  /** Nasce uma ninhada (menor se a mãe estiver mal alimentada; no grupo lotado, parte não sobrevive). */
+  birth(g, mother) {
+    const L = PREY[g.sp].life;
+    const n = clamp(Math.round(L.litter[0] + (mother.food - 60) / 30 + Math.random() * (L.litter[1] - L.litter[0] + 0.5)), L.litter[0], L.litter[1]);
+    let born = 0;
+    for (let i = 0; i < n; i++) {
+      if (g.members.length >= L.cap && Math.random() < 0.5) { this.stats.deaths.lotacao++; this.bySp[g.sp].deaths++; continue; }
+      g.members.push(new Creature(g.sp, Math.random() < 0.5 ? 'M' : 'F', 0));
+      born++;
     }
-    c.pool = this.warrens.length ? c.pool / this.warrens.length : 0;
+    mother.cool = L.cool;
+    this.stats.births += born;
+    this.bySp[g.sp].births += born;
+    this.events.push({ type: 'birth', sp: g.sp, x: g.x, y: g.y, n: born });
+  }
+
+  /** Um passo de tempo para todos os grupos (os longe da câmera são calculados a cada 2 s). @param {number} dt @param {{sp: number, clock: number, dark: number}} env */
+  update(dt, env) {
+    const si = Math.floor(env.sp) % 4, asleep = env.dark > 0.55;
+    for (const g of this.groups) {
+      g.acc += dt;
+      if (!g.near && g.acc < 2) continue;
+      const d = g.acc;
+      g.acc = 0;
+      this.stepGroup(g, d, env, si, asleep);
+    }
+    // rede de segurança: se uma espécie quase some, um casal chega de fora do mapa a um grupo vazio
+    this.immT += dt;
+    if (this.immT > 1200) {
+      this.immT = 0;
+      for (const sp of Object.keys(PREY)) {
+        const B = this.bySp[sp];
+        if (!B.initialTotal) continue;
+        const gs = this.groups.filter((g) => g.sp === sp), total = gs.reduce((s, g) => s + g.members.length, 0);
+        if (total >= B.initialTotal * 0.2) continue;
+        const empty = gs.filter((g) => g.members.length < 2);
+        if (!empty.length) continue;
+        const g = empty[Math.floor(Math.random() * empty.length)], age = PREY[sp].life.young + 100;
+        g.members.push(new Creature(sp, 'M', age), new Creature(sp, 'F', age));
+        this.stats.immigrated++;
+        this.events.push({ type: 'colonize', sp, x: g.x, y: g.y });
+      }
+    }
+    if (this.events.length > 80) this.events.splice(0, this.events.length - 80);
+  }
+
+  /** @returns {Group|null} grupo com toca visível perto do ponto */
+  burrowAt(x, y) { return this.groups.find((g) => PREY[g.sp].den === 'burrow' && Math.hypot(g.x - x, g.y - y) < 9) || null; }
+
+  /** Contagens da população, no total e por espécie. */
+  census() {
+    const c = { total: 0, groups: this.groups.length, bySp: {} };
+    for (const sp of Object.keys(PREY)) c.bySp[sp] = { total: 0, stages: [0, 0, 0, 0], males: 0, females: 0, pregnant: 0, groups: 0, empty: 0, pool: 0 };
+    for (const g of this.groups) {
+      const e = c.bySp[g.sp];
+      e.groups++; e.pool += g.pool;
+      if (!g.members.length) e.empty++;
+      for (const m of g.members) { c.total++; e.total++; e.stages[m.stage]++; if (m.sex === 'M') e.males++; else e.females++; if (m.preg > 0) e.pregnant++; }
+    }
+    for (const e of Object.values(c.bySp)) e.pool = e.groups ? e.pool / e.groups : 0;
     return c;
   }
 }
 
-// ---------- coelhos em cena ----------
-/** Um coelho visível: anda, come, fica alerta, foge e se esconde na toca (dados em `d`). */
-class RabbitActor {
-  /** @param {Rabbit} d @param {Warren} w */
-  constructor(d, w) {
+// ---------- animais em cena ----------
+/** Um animal visível: anda, come, fica alerta, foge e se recolhe no abrigo (dados em `d`). */
+class CreatureActor {
+  /** @param {Creature} d @param {Group} g */
+  constructor(d, g) {
     this.d = d;
-    this.w = w;
-    this.x = w.x;
-    this.y = w.y;
+    this.g = g;
+    this.S = PREY[d.sp];
+    this.x = g.x;
+    this.y = g.y;
     this.dir = Math.random() < 0.5 ? 1 : -1;
     this.state = 'idle';
     this.inside = true;
@@ -2820,38 +3317,41 @@ class RabbitActor {
   }
 
   /** @returns {number} velocidade de andar (px/s) conforme a fase */
-  get speed() { return [30, 36, 40, 28][this.d.stage]; }
+  get speed() { return this.S.move.speed[this.d.stage]; }
 
-  /** @returns {boolean} se pode pisar no ponto (capim, mata e areia; sem água nem obstáculos) */
-  ok(world, x, y) { return RABBIT_BIOMES.has(world.biomeAt(x, y)) && !world.solidAt(x, y) && x > 8 && y > 8; }
+  /** @returns {boolean} se pode pisar no ponto (bioma da espécie e, em terra, sem obstáculos) */
+  ok(world, x, y) { return this.S.roamSet.has(world.biomeAt(x, y)) && (this.S.water || !world.solidAt(x, y)) && x > 8 && y > 8; }
 
   /** @param {number} dt @param {object} ctx */
   update(dt, ctx) {
-    const d = this.d, w = this.w, st = d.stage, world = ctx.world;
+    const d = this.d, g = this.g, S = this.S, M = S.move, st = d.stage, world = ctx.world;
     this.t += dt;
+    const shelter = ctx.shelter || (S.coldShelter && g.snow > 0.4);
     if (this.inside) {
       this.hide = Math.max(0, this.hide - dt);
-      if (!ctx.shelter && this.hide <= 0 && (st > 0 || d.age > 60)) {
+      if (!shelter && this.hide <= 0 && (st > 0 || d.age > S.life.kit * 0.4)) {
         this.emerge -= dt;
-        if (this.emerge <= 0) { this.inside = false; this.state = 'idle'; this.timer = 0.6; this.x = w.x + (Math.random() - 0.5) * 6; this.y = w.y + 3; ctx.fx.push({ type: 'puff', x: w.x, y: w.y, t: 0 }); }
+        if (this.emerge <= 0) { this.inside = false; this.state = 'idle'; this.timer = 0.6; this.x = g.x + (Math.random() - 0.5) * 6; this.y = g.y + 3; if (S.den === 'burrow') ctx.fx.push({ type: 'puff', x: g.x, y: g.y, t: 0 }); }
       }
       return;
     }
     if (d.mated !== this.lastMated) { this.lastMated = d.mated; ctx.fx.push({ type: 'heart', x: this.x, y: this.y - 14, t: 0 }); }
-    const range = st === 0 ? 20 : st === 1 ? 50 : 90;
-    const toBurrow = Math.hypot(w.x - this.x, w.y - this.y);
-    // abrigo: à noite ou com tempo ruim todos se recolhem
-    if (ctx.shelter && this.state !== 'toHome') { this.state = 'toHome'; this.hide = 0; }
-    // medo das pessoas: corre para a toca se ela estiver perto, senão foge
-    if (this.state !== 'toHome' && this.state !== 'flee') {
+    const range = M.range[Math.min(st, 2)];
+    const toHomeDist = Math.hypot(g.x - this.x, g.y - this.y);
+    // abrigo: à noite, na tempestade ou no frio todos se recolhem
+    if (shelter && this.state !== 'toHome') { this.state = 'toHome'; this.hide = 0; }
+    // medo das pessoas: corre para o abrigo se estiver perto, senão foge
+    if (M.shy && this.state !== 'toHome' && this.state !== 'flee') {
       for (const o of ctx.people) {
-        if (Math.hypot(o.x - this.x, o.y - this.y) < (st === 0 ? 30 : 55)) {
-          if (toBurrow < 90) { this.state = 'toHome'; this.hide = 5 + Math.random() * 6; } else { this.state = 'flee'; this.timer = 1.2 + Math.random() * 0.8; this.fleeAng = Math.atan2(this.y - o.y, this.x - o.x) + (Math.random() - 0.5) * 0.8; }
+        if (Math.hypot(o.x - this.x, o.y - this.y) < (st === 0 ? M.shy * 0.55 : M.shy)) {
+          if (toHomeDist < 90) { this.state = 'toHome'; this.hide = 5 + Math.random() * 6; }
+          else { this.state = 'flee'; this.timer = 1.2 + Math.random() * 0.8; this.fleeAng = Math.atan2(this.y - o.y, this.x - o.x) + (Math.random() - 0.5) * 0.8; }
           break;
         }
       }
     }
-    const hop = Math.floor(this.t / 0.17) % 2 === 1;
+    const hopT = M.hopT || 0.2, hop = M.hops ? Math.floor(this.t / hopT) % 2 === 1 : true;
+    const gait = (v) => (M.hops ? v * (hop ? 2.2 : 0) : v);
     const move = (vx, vy, sp) => {
       if (Math.abs(vx) > 0.2) this.dir = vx > 0 ? 1 : -1;
       const len = Math.hypot(vx, vy) || 1, step = sp * dt, nx = this.x + (vx / len) * step, ny = this.y + (vy / len) * step;
@@ -2860,69 +3360,71 @@ class RabbitActor {
       if (this.ok(world, this.x, ny)) { this.y = ny; return true; }
       return false;
     };
+    const stepFrame = (fast) => (M.hops ? (hop ? 'w1' : 'w0') : (Math.floor(this.t / (fast ? 0.14 : 0.3)) % 2 === 0 ? 'w0' : 'w1'));
     if (this.state === 'toHome') {
-      if (toBurrow < 3) { this.inside = true; this.state = 'idle'; this.emerge = 2 + Math.random() * 20; ctx.fx.push({ type: 'puff', x: w.x, y: w.y, t: 0 }); return; }
-      move(w.x - this.x, w.y - this.y, this.speed * 2.3 * (hop ? 1.6 : 0.4));
-      this.frame = hop ? 'w1' : 'w0';
+      if (toHomeDist < 3) { this.inside = true; this.state = 'idle'; this.emerge = 2 + Math.random() * 20; if (S.den === 'burrow') ctx.fx.push({ type: 'puff', x: g.x, y: g.y, t: 0 }); return; }
+      move(g.x - this.x, g.y - this.y, M.hops ? this.speed * 2.3 * (hop ? 1.6 : 0.4) : this.speed * 1.8);
+      this.frame = stepFrame(true);
     } else if (this.state === 'flee') {
       if (!move(Math.cos(this.fleeAng), Math.sin(this.fleeAng), this.speed * 2.3)) this.fleeAng += 1.2;
-      this.frame = Math.floor(this.t / 0.1) % 2 === 0 ? 'w0' : 'w1';
+      this.frame = M.hops ? (Math.floor(this.t / 0.1) % 2 === 0 ? 'w0' : 'w1') : stepFrame(true);
       this.timer -= dt;
       if (this.timer <= 0) { this.state = 'idle'; this.timer = 1; }
     } else if (this.state === 'walk' && this.target) {
       const vx = this.target.x - this.x, vy = this.target.y - this.y, dist = Math.hypot(vx, vy);
-      if (dist < 2 || !move(vx, vy, this.speed * (hop ? 2.2 : 0))) { this.state = 'idle'; this.timer = 0.5 + Math.random() * 2; }
+      if (dist < 2 || !move(vx, vy, gait(this.speed))) { this.state = 'idle'; this.timer = 0.5 + Math.random() * 2; }
       this.timer -= dt;
       if (this.timer <= 0) { this.state = 'idle'; this.timer = 0.5; }
-      this.frame = hop ? 'w1' : 'w0';
+      this.frame = stepFrame(false);
     } else if (this.state === 'act') {
       this.actT += dt;
       this.frame = (this.act === 'eat' ? 'eat' : 'act') + (Math.floor(this.actT / 0.4) % 2);
       this.timer -= dt;
       if (this.timer <= 0) {
-        if (this.act === 'eat' && w.pool > 5) { d.food = Math.min(100, d.food + 10); w.pool -= 5; ctx.fx.push({ type: 'spark', x: this.x, y: this.y - 8, t: 0 }); }
+        if (this.act === 'eat' && g.pool > 5) { d.food = Math.min(100, d.food + 10); g.pool -= 10 * S.forage.use; ctx.fx.push({ type: 'spark', x: this.x, y: this.y - 8, t: 0 }); }
         this.state = 'idle'; this.timer = 0.5 + Math.random();
       }
     } else {
       this.frame = 'idle';
       this.timer -= dt;
       if (this.timer <= 0) {
-        const hungry = d.food < 75 && w.pool > 5 && st > 0 && !(st === 0);
+        const hungry = d.food < 75 && g.pool > 5 && st > 0;
         const r = Math.random();
         if (hungry && r < 0.55) { this.state = 'act'; this.act = 'eat'; this.actT = 0; this.timer = 3 + Math.random() * 3; }
         else if (r < 0.75) { this.state = 'act'; this.act = 'alert'; this.actT = 0; this.timer = 2 + Math.random() * 2; }
         else {
-          const away = toBurrow > range;
+          const away = toHomeDist > range;
           for (let k = 0; k < 6; k++) {
-            const ang = away ? Math.atan2(w.y - this.y, w.x - this.x) + (Math.random() - 0.5) : Math.random() * 6.28, dist = 10 + Math.random() * 26;
-            const tx = this.x + Math.cos(ang) * dist, ty = this.y + Math.sin(ang) * dist;
+            let ang = away ? Math.atan2(g.y - this.y, g.x - this.x) + (Math.random() - 0.5) : Math.random() * 6.28;
+            if (M.sideways && !away) ang = Math.random() < 0.5 ? 0 : Math.PI;
+            const dist = 10 + Math.random() * 26, tx = this.x + Math.cos(ang) * dist, ty = this.y + Math.sin(ang) * dist;
             if (this.ok(world, tx, ty)) { this.target = { x: tx, y: ty }; this.state = 'walk'; this.timer = dist / this.speed + 1.5; break; }
           }
           if (this.state !== 'walk') this.timer = 1;
         }
       }
     }
-    this.lift = (this.frame === 'w1' && (this.state === 'walk' || this.state === 'flee' || this.state === 'toHome')) ? 3 : 0;
+    this.lift = (M.hopLift && (this.frame === 'w1') && (this.state === 'walk' || this.state === 'flee' || this.state === 'toHome')) ? M.hopLift : 0;
   }
 }
 
-/** Mantém os coelhos em cena só perto da câmera (os dados continuam existindo no mundo todo). */
-class RabbitField {
+/** Mantém os animais em cena só perto da câmera (os dados continuam existindo no mundo todo). */
+class CreatureField {
   /** @param {Ecology} eco */
   constructor(eco) {
     this.eco = eco;
-    /** @type {RabbitActor[]} */
+    /** @type {CreatureActor[]} */
     this.actors = [];
   }
 
   /** @param {number} dt @param {{cx: number, cy: number, radius: number, people: Array<{x: number, y: number}>, shelter: boolean, clock: number, fx: Array<object>, world: World}} ctx */
   update(dt, ctx) {
     const keep = [];
-    for (const w of this.eco.warrens) {
-      w.near = Math.hypot(w.x - ctx.cx, w.y - ctx.cy) < ctx.radius + 70;
-      for (const m of w.members) {
-        if (!w.near) { m.actor = null; continue; }
-        if (!m.actor || m.actor.w !== w) m.actor = new RabbitActor(m, w);
+    for (const g of this.eco.groups) {
+      g.near = Math.hypot(g.x - ctx.cx, g.y - ctx.cy) < ctx.radius + 70;
+      for (const m of g.members) {
+        if (!g.near) { m.actor = null; continue; }
+        if (!m.actor || m.actor.g !== g) m.actor = new CreatureActor(m, g);
         keep.push(m.actor);
       }
     }
@@ -2930,7 +3432,7 @@ class RabbitField {
     for (const a of keep) a.update(dt, ctx);
   }
 
-  /** @returns {RabbitActor|null} coelho cujo desenho contém o ponto da tela */
+  /** @returns {CreatureActor|null} animal cujo desenho contém o ponto da tela */
   at(sx, sy) {
     let best = null;
     for (const a of this.actors) {
@@ -2940,10 +3442,6 @@ class RabbitField {
     return best;
   }
 }
-
-/** Ícones das causas de morte (para os avisos). */
-const DEATH_ICON = { idade: '⏳', fome: '🥕', acidente: '⚠️', frio: '🥶', lotacao: '🏘️' };
-
 /** Controla posição, rota e pulos do personagem: acha o caminho, contorna obstáculos e olha para o Sul quando para. */
 class HopWalker {
   /** @param {number} x @param {number} y @param {World} world */
@@ -3086,7 +3584,7 @@ class MapView {
     this.adam = new SpriteBank();
     this.evaSprites = new SpriteBank(new EvaSpriteFactory());
     this.seasonSprites = new SeasonSprites();
-    this.rabbitSprites = new RabbitSprites();
+    this.creatureSprites = new CreatureSprites();
     this.burrowSprite = makeBurrowSprite();
     this.sway = new SwayBank();
     this.wind = 0.5;
@@ -3113,7 +3611,7 @@ class MapView {
     this.eva = new Eva(world, this.walker);
     this.adamS = new Survivor('Adão', this.walker, world);
     this.ecology = new Ecology(world, this.walker);
-    this.rabbits = new RabbitField(this.ecology);
+    this.fauna = new CreatureField(this.ecology);
     this.evaS = this.eva.surv;
     this.intent = null;
     this.weather = new Weather();
@@ -3256,12 +3754,13 @@ class MapView {
       // coelhos: população do mundo todo + os que estão perto da câmera (só de dia; à noite e na tempestade ficam na toca)
       const cam1 = this.camera(), dark = darkness(env.hour), storm = this.weather.intensity > 0.5 && this.weather.kind !== 'snow';
       this.ecology.update(dt, { sp: this.world.sp, clock: this.clock, dark });
-      this.rabbits.update(dt, { cx: cam1.x + this.w / 2, cy: cam1.y + this.h / 2, radius: Math.hypot(this.w, this.h) / 2 + 120, people: [this.walker, this.eva.walker], shelter: dark > 0.55 || storm, clock: this.clock, fx: this.fx, world: this.world });
+      this.fauna.update(dt, { cx: cam1.x + this.w / 2, cy: cam1.y + this.h / 2, radius: Math.hypot(this.w, this.h) / 2 + 120, people: [this.walker, this.eva.walker], shelter: dark > 0.55 || storm, clock: this.clock, fx: this.fx, world: this.world });
       for (const ev of this.ecology.events.splice(0)) {
         if (Math.hypot(ev.x - this.walker.x, ev.y - this.walker.y) > 240) continue;
-        if (ev.type === 'birth' && ev.n) this.notify(`🐇🍼 +${ev.n}`, 'good', 'coelho', 3000);
-        else if (ev.type === 'death') this.notify(`🐇✝ ${DEATH_ICON[ev.cause]}`, 'info', 'coelho', 3000);
-        else if (ev.type === 'colonize') this.notify('🕳️ 🐇 nova toca', 'good', 'coelho', 3000);
+        const ic = PREY[ev.sp].icon;
+        if (ev.type === 'birth' && ev.n) this.notify(`${ic}🍼 +${ev.n}`, 'good', 'fauna', 3000);
+        else if (ev.type === 'death') this.notify(`${ic}✝ ${DEATH_ICON[ev.cause]}`, 'info', 'fauna', 3000);
+        else if (ev.type === 'colonize') this.notify(`${ic} novo grupo`, 'good', 'fauna', 3000);
       }
     }
     for (const f of this.fx) f.t += dt;
@@ -3347,30 +3846,33 @@ class MapView {
     }
   }
 
-  /** Desenha as tocas (entradas na terra) visíveis na tela. */
+  /** Desenha as tocas (entradas na terra) visíveis na tela, só das espécies que cavam. */
   drawBurrows(ctx, cam) {
-    for (const w of this.ecology.warrens) {
-      const x = Math.round(w.x - cam.x - 7), y = Math.round(w.y - cam.y - 4);
-      if (x < -20 || y < -20 || x > this.w + 20 || y > this.h + 20) { w.rect = null; continue; }
+    for (const g of this.ecology.groups) {
+      if (PREY[g.sp].den !== 'burrow') continue;
+      const x = Math.round(g.x - cam.x - 7), y = Math.round(g.y - cam.y - 4);
+      if (x < -20 || y < -20 || x > this.w + 20 || y > this.h + 20) { g.rect = null; continue; }
       ctx.drawImage(this.burrowSprite, x, y);
-      w.rect = { x, y, w: 14, h: 8 };
+      g.rect = { x, y, w: 14, h: 8 };
     }
   }
 
-  /** Desenha um coelho (sombra, sprite da fase e capim na boca quando come). */
-  drawRabbit(a, cam) {
-    const ctx = this.ctx, e = this.rabbitSprites.get(a.frame, a.d.stage, a.dir < 0), c = e.canvas;
+  /** Desenha um animal (sombra ou ondinhas na água, sprite da fase e o alimento na boca quando come). */
+  drawCreature(a, cam) {
+    const ctx = this.ctx, S = a.S, e = this.creatureSprites.get(a.d.sp, a.frame, a.d.stage, a.dir < 0), c = e.canvas;
     const x = Math.round(a.x - cam.x - c.width / 2), y = Math.round(a.y - cam.y - c.height + 1 - a.lift);
     const gx = Math.round(a.x - cam.x), gy = Math.round(a.y - cam.y);
-    ctx.fillStyle = 'rgba(20,30,20,0.28)';
-    const half = Math.max(2, Math.round(c.width * 0.36 * (1 - a.lift / 20)));
-    for (let dy = -1; dy <= 1; dy++) { const hw = Math.round(half * Math.sqrt(1 - (dy / 2) * (dy / 2))); ctx.fillRect(gx - hw, gy + dy, hw * 2, 1); }
-    ctx.drawImage(c, x, y);
-    if (a.state === 'act' && a.act === 'eat') {
-      const fl = a.dir < 0;
-      ctx.fillStyle = '#6fc85a'; ctx.fillRect(x + e.mouth.x + (fl ? -1 : 0), y + e.mouth.y - 1, 1, 2);
-      ctx.fillStyle = '#4ea84a'; ctx.fillRect(x + e.mouth.x + (fl ? -2 : 1), y + e.mouth.y, 1, 1);
+    if (S.water) {
+      const rr = Math.max(3, Math.round(c.width * 0.45 + Math.sin(a.t * 2) * 0.8));
+      ctx.fillStyle = 'rgba(235,250,255,0.55)';
+      for (let k = 0; k < 28; k++) { const ang = (k / 28) * Math.PI * 2; ctx.fillRect(Math.round(gx + Math.cos(ang) * rr), Math.round(gy - 1 + Math.sin(ang) * rr * 0.32), 1, 1); }
+    } else {
+      ctx.fillStyle = 'rgba(20,30,20,0.28)';
+      const half = Math.max(2, Math.round(c.width * 0.36 * (1 - a.lift / 20)));
+      for (let dy = -1; dy <= 1; dy++) { const hw = Math.round(half * Math.sqrt(1 - (dy / 2) * (dy / 2))); ctx.fillRect(gx - hw, gy + dy, hw * 2, 1); }
     }
+    ctx.drawImage(c, x, y);
+    if (a.state === 'act' && a.act === 'eat' && S.item) drawItem(ctx, S.item, x + e.mouth.x, y + e.mouth.y, a.dir < 0);
     a.rect = { x, y, w: c.width, h: c.height };
     return { c, x, y };
   }
@@ -3569,7 +4071,7 @@ class MapView {
     const plants = world.plantsIn(cam.x - 40, cam.y, cam.x + this.w + 40, cam.y + this.h + 90);
     for (const p of plants) if (FLAT_SPECIES.has(p.id)) this.drawPlant(p, cam);
     this.drawBurrows(ctx, cam);
-    for (const a of this.rabbits.actors) a.rect = null;
+    for (const a of this.fauna.actors) a.rect = null;
     // personagem
     const { frame, lift } = this.walker.pose();
     const px = Math.round(this.walker.x - cam.x), py = Math.round(this.walker.y - cam.y);
@@ -3578,7 +4080,7 @@ class MapView {
     const sx = px - CENTER_X + shk, sy = py - 27 - lift;
     const items = [{ y: wy, k: 1, kind: 'adam' }, { y: this.eva.walker.y, k: 1, kind: 'eva' }];
     for (const p of plants) if (!FLAT_SPECIES.has(p.id)) items.push({ y: p.y, k: 0, kind: 'plant', p });
-    for (const a of this.rabbits.actors) if (!a.inside && a.x > cam.x - 30 && a.x < cam.x + this.w + 30 && a.y > cam.y - 10 && a.y < cam.y + this.h + 50) items.push({ y: a.y, k: 0, kind: 'rabbit', a });
+    for (const a of this.fauna.actors) if (!a.inside && a.x > cam.x - 30 && a.x < cam.x + this.w + 30 && a.y > cam.y - 10 && a.y < cam.y + this.h + 50) items.push({ y: a.y, k: 0, kind: 'creature', a });
     items.sort((u, v) => u.y - v.y || u.k - v.k);
     const fronts = [];
     let adamDrawn = false;
@@ -3606,8 +4108,8 @@ class MapView {
         } else this.evaRect = null;
         continue;
       }
-      if (it.kind === 'rabbit') {
-        r = this.drawRabbit(it.a, cam);
+      if (it.kind === 'creature') {
+        r = this.drawCreature(it.a, cam);
         if (adamDrawn && r && r.x < sx + sprite.width && r.x + r.c.width > sx && r.y < sy + sprite.height && r.y + r.c.height > sy) fronts.push(r);
         continue;
       }
@@ -3921,51 +4423,70 @@ function buildPeopleCatalog() {
   root.appendChild(box);
 }
 
-/** Seção "Coelhos" do catálogo: as 4 fases da vida e as estatísticas da população (atualizadas ao vivo). */
-function buildRabbitCatalog() {
+/** Seção "Animais" do catálogo: cada espécie de presa com suas fases da vida e a população ao vivo. */
+function buildFaunaCatalog() {
   const root = document.getElementById('catalog');
   const head = document.createElement('h1');
-  head.textContent = 'Coelhos';
+  head.textContent = 'Animais (presas)';
   head.className = 'cat-title';
   root.appendChild(head);
-  const box = document.createElement('section');
-  const card = document.createElement('div');
-  card.className = 'animal';
-  const row = document.createElement('div');
-  row.className = 'row';
-  const bank = new RabbitSprites();
-  const labels = ['🍼 0–2,5 min', '🌱 até 7 min', '💪 adulto', '👴 últimos 30 min'];
-  for (let st = 0; st < 4; st++) {
-    const src = bank.get('idle', st).canvas, fig = document.createElement('figure'), c = document.createElement('canvas');
-    c.width = src.width; c.height = src.height;
-    c.getContext('2d').drawImage(src, 0, 0);
-    c.style.width = `${src.width * 5}px`; c.style.height = `${src.height * 5}px`;
-    fig.appendChild(c);
-    const cap = document.createElement('figcaption');
-    cap.textContent = labels[st];
-    fig.appendChild(cap);
-    row.appendChild(fig);
-  }
-  card.appendChild(row);
   const note = document.createElement('div');
   note.className = 'adesc';
-  note.textContent = 'Só saem de dia; à noite e na tempestade ficam na toca. Gestação de 2 min, ninhadas de 2 a 5, filhotes viram adultos aos 7 min e vivem de 1h40 a 2h40. Quando a toca lota, os jovens se mudam ou fundam tocas novas.';
-  card.appendChild(note);
+  note.style.margin = '6px 2px 10px';
+  note.textContent = 'Só saem de dia; à noite, na tempestade (e no frio, os de sangue frio) ficam recolhidos. Têm filhote, jovem, adulto e idoso; nascem, morrem, se mudam e fundam grupos novos. Ainda não há predadores.';
+  root.appendChild(note);
   const stats = document.createElement('div');
-  stats.id = 'ecoStats';
+  stats.id = 'ecoTotals';
   stats.className = 'adesc';
-  stats.style.cssText = 'margin-top:8px; line-height:1.7; font-size:14px;';
-  card.appendChild(stats);
-  box.appendChild(card);
-  root.appendChild(box);
+  stats.style.cssText = 'margin:0 2px 10px; line-height:1.7; font-size:14px;';
+  root.appendChild(stats);
+  const bank = new CreatureSprites();
+  for (const sp of Object.keys(PREY)) {
+    const S = PREY[sp], card = document.createElement('div');
+    card.className = 'animal';
+    const t = document.createElement('div');
+    t.className = 'aname';
+    t.textContent = `${S.icon} ${S.name}`;
+    card.appendChild(t);
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (const st of [0, 2, 3]) {
+      const src = bank.get(sp, 'idle', st).canvas, fig = document.createElement('figure'), c = document.createElement('canvas');
+      c.width = src.width; c.height = src.height;
+      c.getContext('2d').drawImage(src, 0, 0);
+      const k = Math.max(2, Math.min(5, Math.floor(110 / Math.max(src.width, src.height))));
+      c.style.width = `${src.width * k}px`; c.style.height = `${src.height * k}px`;
+      fig.appendChild(c);
+      const cap = document.createElement('figcaption');
+      cap.textContent = STAGE_ICON[st];
+      fig.appendChild(cap);
+      row.appendChild(fig);
+    }
+    card.appendChild(row);
+    const L = S.life, m = (s) => Math.round(s / 60);
+    const info = document.createElement('div');
+    info.className = 'adesc';
+    info.textContent = `🍼 até ${m(L.kit)} min · 🌱 até ${m(L.young)} min · ⏳ vive ${Math.round(L.lifeMin / 600) / 10}–${Math.round(L.lifeMax / 600) / 10} h · 🤰 ${m(L.gest)} min · ninhada ${L.litter[0]}${L.litter[1] > L.litter[0] ? `–${L.litter[1]}` : ''}`;
+    card.appendChild(info);
+    const live = document.createElement('div');
+    live.className = 'adesc eco-sp';
+    live.dataset.sp = sp;
+    live.style.cssText = 'margin-top:4px; font-size:14px;';
+    card.appendChild(live);
+    root.appendChild(card);
+  }
 }
 
-/** Atualiza os números da população de coelhos no catálogo (só quando a aba está aberta). */
+/** Atualiza os números da população no catálogo (só quando a aba está aberta). */
 function refreshEcology(view) {
-  const el = document.getElementById('ecoStats');
+  const el = document.getElementById('ecoTotals');
   if (!el || el.offsetParent === null || !view.ecology) return;
-  const c = view.ecology.census(), s = view.ecology.stats, d = s.deaths;
-  el.innerHTML = `🐇 <b>${c.total}</b> &nbsp; 🍼${c.stages[0]} 🌱${c.stages[1]} 💪${c.stages[2]} 👴${c.stages[3]}<br>♂${c.males} ♀${c.females} 🤰${c.pregnant}<br>🕳️ ${c.warrens} tocas (vazias: ${c.empty}) · 🌱 pasto ${Math.round(c.pool)}<br>🍼 nascimentos <b>${s.births}</b> · ✝ mortes ⏳${d.idade} 🥕${d.fome} ⚠️${d.acidente} 🥶${d.frio} 🏘️${d.lotacao}<br>🚶 mudanças ${s.dispersed} · 🕳️ novas tocas ${s.colonized} · 🛬 chegadas ${s.immigrated || 0}`;
+  const E = view.ecology, c = E.census(), s = E.stats, d = s.deaths;
+  el.innerHTML = `🌍 <b>${c.total}</b> animais em ${c.groups} grupos<br>🍼 nascimentos <b>${s.births}</b> · ✝ mortes ⏳${d.idade} 🥕${d.fome} ⚠️${d.acidente} 🥶${d.frio} 🏘️${d.lotacao}<br>🚶 mudanças ${s.dispersed} · 🆕 grupos novos ${s.colonized} · 🛬 chegadas ${s.immigrated}`;
+  for (const live of document.querySelectorAll('.eco-sp')) {
+    const e = c.bySp[live.dataset.sp];
+    live.innerHTML = `<b>${e.total}</b> &nbsp; 🍼${e.stages[0]} 🌱${e.stages[1]} 💪${e.stages[2]} 👴${e.stages[3]} &nbsp; ♂${e.males} ♀${e.females} 🤰${e.pregnant} &nbsp; 👥${e.groups - e.empty}/${e.groups}`;
+  }
 }
 
 /** Ponto de entrada. */
@@ -3976,7 +4497,7 @@ function refreshEcology(view) {
   const speciesBank = new SpeciesBank();
   buildCatalog(speciesBank);
   buildPeopleCatalog();
-  buildRabbitCatalog();
+  buildFaunaCatalog();
   const start = (seed) => new Promise((resolve) => {
     loading.hidden = false;
     setTimeout(() => { const w = generateWorld(seed); loading.hidden = true; resolve(w); }, 30);
@@ -4003,14 +4524,14 @@ function refreshEcology(view) {
       }
       // planta comestível sob o toque
       const cam = view.camera(), sx = p.x - cam.x, sy = p.y - cam.y;
-      const ra = view.rabbits.at(sx, sy);
+      const ra = view.fauna.at(sx, sy);
       if (ra) {
         const d = ra.d;
-        showLabel(`🐇${d.sex === 'F' ? '♀' : '♂'} ${STAGE_ICON[d.stage]} ⏳${Math.floor(d.age / 60)}m 🥕${Math.round(d.food)} ❤${Math.round(d.health)}${d.preg > 0 ? ' 🤰' : ''}`);
+        showLabel(`${PREY[d.sp].icon}${d.sex === 'F' ? '♀' : '♂'} ${STAGE_ICON[d.stage]} ⏳${Math.floor(d.age / 60)}m 🥕${Math.round(d.food)} ❤${Math.round(d.health)}${d.preg > 0 ? ' 🤰' : ''}`);
         return;
       }
       const bw = view.ecology.burrowAt(p.x, p.y);
-      if (bw) { showLabel(`🕳️ 🐇${bw.members.length} 🌱${Math.round(bw.pool)}`); return; }
+      if (bw) { showLabel(`🕳️ ${PREY[bw.sp].icon}${bw.members.length} 🌱${Math.round(bw.pool)}`); return; }
       const pr = view.plantRects.filter((r) => sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h).sort((u, v) => v.p.y - u.p.y)[0];
       if (pr) {
         if (isPoison(pr.p)) { view.notify('Cogumelo vermelho: venenoso. Melhor não comer!'); return; }
