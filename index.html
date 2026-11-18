@@ -33,17 +33,14 @@
   *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { height: 100%; overscroll-behavior: none; scroll-padding-top: env(safe-area-inset-top, 0px); }
   body {
-    height: 100%; margin: 0; overflow: hidden; background: var(--panel); color: var(--ink);
+    height: 100%; margin: 0; overflow: hidden; background: #13222c; color: var(--ink);
     font-family: "Instrument Sans", "Segoe UI", system-ui, sans-serif; font-size: 15px; line-height: 1.35;
     -webkit-user-select: none; user-select: none; touch-action: manipulation; overscroll-behavior: none;
   }
-  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--panel); }
-  #app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: #13222c; }
+  #app { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); overflow: hidden; }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  #top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px 14px 7px; border-bottom: 1px solid var(--edge); }
-  #top h1 { margin: 0; font-family: "Pixelify Sans", ui-monospace, monospace; font-weight: 600; font-size: 22px; }
-  #top p { margin: 0; color: var(--ink-soft); font-size: 13px; }
   #stage { position: relative; min-height: 0; overflow: hidden; background: var(--grass); display: grid; place-items: center; touch-action: none; }
   #scene { image-rendering: pixelated; image-rendering: crisp-edges; display: block; touch-action: none; cursor: pointer; }
   #sheetView { position: absolute; inset: 0; overflow: auto; background: var(--sheet); padding: 12px; }
@@ -53,10 +50,8 @@
   #sheetGrid .r { font-size: 12.5px; font-weight: 600; }
   #sheetGrid canvas { image-rendering: pixelated; image-rendering: crisp-edges; background: color-mix(in srgb, var(--panel) 45%, transparent); border-radius: 6px; display: block; }
   #tools { position: absolute; right: 8px; top: 52px; display: flex; gap: 6px; }
-  .pill { min-width: 44px; min-height: 44px; padding: 4px 12px; border-radius: 12px; border: 1px solid var(--edge); background: color-mix(in srgb, var(--panel) 88%, transparent); font-weight: 600; }
-  #bar { display: flex; gap: 4px; padding: 6px 8px 8px; border-top: 1px solid var(--edge); }
-  .tab { flex: 1; min-height: 44px; border: 0; border-bottom: 3px solid transparent; background: transparent; font-weight: 600; color: var(--ink-soft); }
-  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .pill { min-width: 44px; min-height: 44px; padding: 4px 12px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.28); background: rgba(18, 28, 30, 0.3); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); font-weight: 500; opacity: 0.85; transition: opacity 0.15s, background 0.15s; }
+  .pill:active { opacity: 1; background: rgba(18, 28, 30, 0.55); }
 
   #stage { background: #13222c; }
   #loading { position: absolute; inset: 0; display: grid; place-content: center; background: color-mix(in srgb, var(--panel) 80%, transparent); z-index: 5; font-family: "Pixelify Sans", ui-monospace, monospace; font-size: 20px; }
@@ -70,7 +65,7 @@
   #catalogView canvas { image-rendering: pixelated; image-rendering: crisp-edges; border-radius: 4px; display: block; }
   #catalogView .plants canvas { background: color-mix(in srgb, var(--grass) 55%, transparent); padding: 2px; }
   #miniWrap { position: absolute; right: 10px; bottom: 10px; width: 118px; height: 118px; }
-  #mini { position: absolute; inset: 0; padding: 0; border: 3px solid #2b1a12; border-radius: 50%; overflow: hidden; background: #13222c; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6), 0 2px 6px rgba(0, 0, 0, 0.35); cursor: pointer; }
+  #mini { position: absolute; inset: 0; padding: 0; border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 50%; overflow: hidden; background: rgba(19, 34, 44, 0.55); box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25); cursor: pointer; opacity: 0.88; }
   #miniCanvas { width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
   #north { position: absolute; left: 50%; top: -11px; transform: translateX(-50%); display: grid; justify-items: center; pointer-events: none; font-family: "Pixelify Sans", ui-monospace, monospace; }
   #north b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #c43a3a; color: #fff; border: 2px solid #2b1a12; font-size: 13px; line-height: 1; }
@@ -84,7 +79,7 @@
   #scene.panning { cursor: grabbing; }
   #follow { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   #tools { position: absolute; right: 8px; top: 50px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-  .pill { font-size: 17px; }
+  .pill { font-size: 18px; }
   #vitals { position: absolute; left: 8px; top: 8px; right: 8px; width: fit-content; max-width: calc(100% - 16px); padding: 6px 8px; border-radius: 12px; background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--edge); font-size: 11.5px; font-weight: 600; display: flex; align-items: center; gap: 4px; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; overflow: hidden; }
   #vitals .vsep { width: 1px; height: 13px; background: rgba(0, 0, 0, 0.22); margin: 0 2px; }
   #vitals .vit { display: inline-flex; align-items: center; gap: 2px; }
@@ -104,11 +99,11 @@
   #mapLegend span { display: inline-flex; align-items: center; gap: 4px; }
   #mapLegend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.55); }
   #mapClose { position: absolute; right: 8px; top: 8px; z-index: 2; }
+  #catalogClose { position: fixed; right: 10px; top: 10px; z-index: 5; color: var(--ink); text-shadow: none; background: color-mix(in srgb, var(--panel) 75%, transparent); border-color: var(--edge); }
 </style>
 </head>
 <body>
 <div id="app">
-  <header id="top"><h1>Biomas</h1><p>vegetação · pixel art · teste 3</p></header>
   <main id="stage">
     <canvas id="scene" aria-label="Mapa com biomas"></canvas>
         <div id="vitals">
@@ -119,13 +114,9 @@
     <div id="pops" aria-live="polite"></div>
     <div id="fullMap" hidden><canvas id="fullMapCanvas"></canvas><div id="mapLegend"></div><button class="pill" id="mapClose" aria-label="Fechar o mapa">✕</button></div>
     <div id="miniWrap"><button id="mini" aria-label="Mini-mapa. Toque para abrir o mapa completo"><canvas id="miniCanvas"></canvas></button><div id="north" aria-label="Norte"><b>N</b></div></div>
-        <div id="catalogView" hidden><div id="catalog"></div></div>
+        <div id="catalogView" hidden><button class="pill" id="catalogClose" aria-label="Fechar o catálogo">✕</button><div id="catalog"></div></div>
     <div id="loading" hidden>Gerando o mundo…</div>
   </main>
-  <nav id="bar" role="tablist">
-    <button class="tab" role="tab" aria-selected="true" data-tab="map">Mapa</button>
-    <button class="tab" role="tab" aria-selected="false" data-tab="catalog">Catálogo</button>
-  </nav>
 </div>
 <script>
 'use strict';
@@ -4610,15 +4601,22 @@ function refreshEcology(view) {
     window.addEventListener('resize', () => view.resize());
     document.getElementById('zoomIn').addEventListener('click', () => view.setScale(view.scale + 1));
     document.getElementById('zoomOut').addEventListener('click', () => view.setScale(view.scale - 1));
-    document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
-      const cat = t.dataset.tab === 'catalog';
+    // sem abas: o catálogo fica escondido (no computador, tecla C abre e fecha)
+    const setCatalog = (cat) => {
       document.getElementById('catalogView').hidden = !cat;
       canvas.style.visibility = cat ? 'hidden' : 'visible';
       document.getElementById('tools').style.display = cat ? 'none' : 'flex';
       document.getElementById('vitals').style.display = cat ? 'none' : 'block';
       document.getElementById('pops').style.display = cat ? 'none' : 'flex';
-    }));
+      document.getElementById('miniWrap').style.display = cat ? 'none' : 'block';
+    };
+    window.showCatalog = setCatalog;
+    document.getElementById('catalogClose').addEventListener('click', () => setCatalog(false));
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      if (e.key === 'c' || e.key === 'C') setCatalog(document.getElementById('catalogView').hidden);
+      else if (e.key === 'Escape') setCatalog(false);
+    });
     const keyMap = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1] };
     const held = new Set();
     const applyKeys = () => {

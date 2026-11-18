@@ -1166,15 +1166,22 @@ function refreshEcology(view) {
     window.addEventListener('resize', () => view.resize());
     document.getElementById('zoomIn').addEventListener('click', () => view.setScale(view.scale + 1));
     document.getElementById('zoomOut').addEventListener('click', () => view.setScale(view.scale - 1));
-    document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
-      const cat = t.dataset.tab === 'catalog';
+    // sem abas: o catálogo fica escondido (no computador, tecla C abre e fecha)
+    const setCatalog = (cat) => {
       document.getElementById('catalogView').hidden = !cat;
       canvas.style.visibility = cat ? 'hidden' : 'visible';
       document.getElementById('tools').style.display = cat ? 'none' : 'flex';
       document.getElementById('vitals').style.display = cat ? 'none' : 'block';
       document.getElementById('pops').style.display = cat ? 'none' : 'flex';
-    }));
+      document.getElementById('miniWrap').style.display = cat ? 'none' : 'block';
+    };
+    window.showCatalog = setCatalog;
+    document.getElementById('catalogClose').addEventListener('click', () => setCatalog(false));
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      if (e.key === 'c' || e.key === 'C') setCatalog(document.getElementById('catalogView').hidden);
+      else if (e.key === 'Escape') setCatalog(false);
+    });
     const keyMap = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1] };
     const held = new Set();
     const applyKeys = () => {

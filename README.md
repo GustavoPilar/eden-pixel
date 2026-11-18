@@ -14,6 +14,7 @@ abra no navegador e jogue.
 | Beber | Toque num lago (a água do mar é salgada; o gelo mata a sede, mas esfria o corpo) |
 | Colher | Toque numa planta comestível (elas brilham quando você está perto) |
 | Mover a câmera | Arraste o mapa; o botão 🎯 volta a seguir o Adão |
+| Catálogo | Tecla `C` (computador) |
 | Mapa completo | Toque no minimapa (círculo no canto): abre o mundo todo em tela cheia, com o Adão, a Eva e a área que você está vendo; feche no ✕ (no computador, tecla `M` ou `Esc`) |
 | Zoom | Pinça no celular, roda do mouse ou botões `+` e `−` (1× a 8×) |
 | Ver detalhes | Toque na Eva, num animal ou numa toca de coelho para um aviso com ícones e números |
@@ -36,7 +37,7 @@ No computador também dá para andar com as setas ou WASD.
   adulto e idoso; reprodução, mortes (idade, fome, acidente, frio, superlotação), dispersão e fundação de grupos novos.
   A população do mundo todo é simulada, mesmo longe da câmera; à noite, na tempestade (e no frio, os de sangue frio)
   os animais se recolhem. Ainda não há predadores.
-- **Catálogo** (aba na parte de baixo): plantas, Adão e Eva e cada espécie de presa, com a população ao vivo.
+- **Catálogo** (tecla `C` no computador; `Esc` ou ✕ fecha): plantas, Adão e Eva e cada espécie de presa, com a população ao vivo. A tela do jogo é limpa, sem menus.
 
 ## Estrutura do repositório
 
